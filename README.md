@@ -26,7 +26,8 @@ GitHub + Cloud Run 기반 여비정산 웹앱 MVP입니다.
 - [x] 카카오 자동차 거리 조회
 - [x] 차량별 공통 계산식
 - [x] Playwright 캡처 기본 골격
-- [ ] OPINET 실제 selector 연결
+- [x] OPINET 날짜·시도·유종 자동선택 및 시군구 결과행 추출
+- [x] OPINET 결과화면 PNG 증빙 캡처
 - [ ] 유가 캐시(Firestore)
 - [ ] 증빙 저장(Cloud Storage)
 - [ ] 전기차 급속충전요금 연결
@@ -38,3 +39,9 @@ Cloud Run은 PORT 환경변수로 전달되는 포트를 사용합니다. Docker
 
 ## 보안
 API Key를 GitHub에 커밋하지 않습니다. 운영 환경에서는 Secret Manager를 사용합니다.
+
+## OPINET 구현 메모
+- 주유소: `dopOsPdrgAreaView.do`
+- LPG: `dopVsAreaselSelect.do`
+- 특정 날짜 + 시도 1개 선택 후 결과표에서 시군구 행을 찾아 가격을 추출합니다.
+- DOM 변경에 대비해 ID selector 우선, 라벨 텍스트 fallback을 함께 사용합니다.
