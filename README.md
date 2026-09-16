@@ -1,13 +1,18 @@
 # 여비정산 자동화 (travel-expense-web)
 
-GitHub + Cloud Run 기반 여비정산 웹앱 MVP입니다.
+GitHub + Cloud Run 기반 여비정산 웹앱입니다.
 
-## 1차 목표
-- 카카오 주소 검색 및 자동차 이동거리 산출
-- OPINET 과거 특정일 + 시군구 + 유종 자동조회
-- OPINET 공식화면 캡처
-- 자동차운임 자동계산
-- 증빙자료 PDF 묶음 생성
+## 현재 설계 원칙
+- 충남 관내 관외출장: **교육지원청 간 공식 고정거리표 우선**
+- 충남 밖 출장/고정거리 미등록 예외: **카카오 자동차 길찾기**
+- 동일 외부 구간: 거리 캐시로 카카오 호출 최소화
+- OPINET: **날짜 + 시도 + 유종당 1회 조회** 후 시군구 전체 가격 재사용
+- 내포: 일반 행정구역으로 추론하지 않고 별도 목적지 코드 `NAEPO` 사용
+- PDF: 요청 시 즉시 생성하고 서버에 장기 보관하지 않음
+
+## 내포 기준점
+현재 개발 기본값은 `충남 홍성군 홍북읍 선화로 22(충청남도교육청)`입니다.
+런칭 전 공식 여비 기준에 맞게 최종 승인/수정할 수 있도록 `data/chungnam_distance_master.json`에 분리했습니다.
 
 ## 기술 스택
 - FastAPI
@@ -15,8 +20,8 @@ GitHub + Cloud Run 기반 여비정산 웹앱 MVP입니다.
 - Kakao Local / Kakao Mobility API
 - Playwright + Chromium
 - Google Cloud Run
-- Firestore
-- Cloud Storage
+- Firestore(배포 시 캐시 백엔드)
+- Cloud Storage(오피넷 공통 증빙)
 - Secret Manager
 
 ## 현재 구현 상태
@@ -24,24 +29,27 @@ GitHub + Cloud Run 기반 여비정산 웹앱 MVP입니다.
 - [x] 기본 UI
 - [x] 카카오 주소 좌표 변환
 - [x] 카카오 자동차 거리 조회
+- [x] 주소/거리 캐시
+- [x] 충남 교육지원청 기준 거리정책 레이어
+- [x] 내포 별도 목적지 코드
 - [x] 차량별 공통 계산식
-- [x] Playwright 캡처 기본 골격
-- [x] OPINET 날짜·시도·유종 자동선택 및 시군구 결과행 추출
+- [x] OPINET 날짜·시도·유종 자동선택
+- [x] OPINET 시군구 전체 가격표 1회 추출 구조
 - [x] OPINET 결과화면 PNG 증빙 캡처
-- [ ] 유가 캐시(Firestore)
-- [ ] 증빙 저장(Cloud Storage)
+- [x] PDF 산출내역 즉시 생성
+- [ ] 충남교육청 공식 고정거리표 실제 값 입력
+- [ ] Firestore 운영 캐시 연결/검증
+- [ ] Cloud Storage 증빙 업로드
 - [ ] 전기차 급속충전요금 연결
-- [ ] 수소차 규정/공식가격 출처 확정
-- [ ] PDF 생성
+- [ ] 수소차 공식가격/규정 확정
+- [ ] 인증/SSO (런칭 단계 결정)
 
 ## Cloud Run
-Cloud Run은 PORT 환경변수로 전달되는 포트를 사용합니다. Dockerfile은 8080을 기본값으로 사용합니다.
+Cloud Run은 `PORT` 환경변수를 사용합니다. Dockerfile 기본값은 8080입니다.
+Playwright/Chromium과 한글 PDF용 Noto CJK 폰트를 함께 설치합니다.
 
 ## 보안
 API Key를 GitHub에 커밋하지 않습니다. 운영 환경에서는 Secret Manager를 사용합니다.
 
-## OPINET 구현 메모
-- 주유소: `dopOsPdrgAreaView.do`
-- LPG: `dopVsAreaselSelect.do`
-- 특정 날짜 + 시도 1개 선택 후 결과표에서 시군구 행을 찾아 가격을 추출합니다.
-- DOM 변경에 대비해 ID selector 우선, 라벨 텍스트 fallback을 함께 사용합니다.
+## 다음 단계
+`docs/CLOUD_RUN_CHECKLIST.md` 순서대로 Cloud Run 배포와 실제 API/브라우저 자동화 검증을 진행합니다.
