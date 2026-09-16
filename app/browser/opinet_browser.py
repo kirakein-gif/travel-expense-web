@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
 from datetime import date
@@ -10,23 +12,15 @@ OIL_URL = "https://www.opinet.co.kr/user/dopospdrg/dopOsPdrgAreaView.do"
 LPG_URL = "https://www.opinet.co.kr/user/dopvsavsel/dopVsAreaselSelect.do"
 
 PROVINCE_ALIASES = {
-    "서울특별시": "서울", "서울": "서울",
-    "부산광역시": "부산", "부산": "부산",
-    "대구광역시": "대구", "대구": "대구",
-    "인천광역시": "인천", "인천": "인천",
-    "광주광역시": "광주", "광주": "광주",
-    "대전광역시": "대전", "대전": "대전",
-    "울산광역시": "울산", "울산": "울산",
-    "세종특별자치시": "세종", "세종": "세종",
-    "경기도": "경기", "경기": "경기",
-    "강원특별자치도": "강원", "강원도": "강원", "강원": "강원",
-    "충청북도": "충북", "충북": "충북",
-    "충청남도": "충남", "충남": "충남",
+    "서울특별시": "서울", "서울": "서울", "부산광역시": "부산", "부산": "부산",
+    "대구광역시": "대구", "대구": "대구", "인천광역시": "인천", "인천": "인천",
+    "광주광역시": "광주", "광주": "광주", "대전광역시": "대전", "대전": "대전",
+    "울산광역시": "울산", "울산": "울산", "세종특별자치시": "세종", "세종": "세종",
+    "경기도": "경기", "경기": "경기", "강원특별자치도": "강원", "강원도": "강원", "강원": "강원",
+    "충청북도": "충북", "충북": "충북", "충청남도": "충남", "충남": "충남",
     "전북특별자치도": "전북", "전라북도": "전북", "전북": "전북",
-    "전라남도": "전남", "전남": "전남",
-    "경상북도": "경북", "경북": "경북",
-    "경상남도": "경남", "경남": "경남",
-    "제주특별자치도": "제주", "제주": "제주",
+    "전라남도": "전남", "전남": "전남", "경상북도": "경북", "경북": "경북",
+    "경상남도": "경남", "경남": "경남", "제주특별자치도": "제주", "제주": "제주",
 }
 
 SIDO_IDS = {
@@ -39,11 +33,11 @@ SIDO_IDS = {
 PRODUCT_IDS = {"gasoline": "chk3_2", "diesel": "chk3_3"}
 PRODUCT_LABELS = {"gasoline": "보통휘발유", "diesel": "자동차용경유", "lpg": "자동차부탄"}
 
+
 @dataclass
-class OpinetResult:
-    price: float
+class OpinetRegionResult:
+    prices: dict[str, float]
     province: str
-    sigungu: str
     product_label: str
     evidence_path: str
     source_url: str
@@ -64,19 +58,15 @@ def normalize_sigungu(value: str) -> str:
 
 
 async def _select_by_id_or_label(page: Page, element_id: str, label_text: str) -> None:
-    # 지역 목록 개편으로 숫자형 ID 순서가 바뀌어도 오선택하지 않도록
-    # 화면에 표시된 라벨 텍스트를 우선 사용한다.
     labels = page.locator("label", has_text=label_text)
     for i in range(await labels.count()):
         label = labels.nth(i)
         if (await label.inner_text()).strip() != label_text:
             continue
-
         candidate = label.locator('input[type="checkbox"], input[type="radio"]')
         if await candidate.count():
             await candidate.check(force=True)
             return
-
         for_attr = await label.get_attribute("for")
         if for_attr:
             target = page.locator(f"#{for_attr}")
@@ -92,25 +82,18 @@ async def _select_by_id_or_label(page: Page, element_id: str, label_text: str) -
         except Exception:
             pass
 
-    # 마지막 fallback으로 기존 DOM ID를 사용한다.
     locator = page.locator(f"#{element_id}")
     if await locator.count():
         await locator.check(force=True)
         return
-
     raise RuntimeError(f"오피넷 선택항목을 찾지 못했습니다: {label_text}")
 
 
 async def _select_date(page: Page, target: date) -> None:
     values = {
-        "STA_Y": str(target.year),
-        "STA_M": f"{target.month:02d}",
-        "STA_D": f"{target.day:02d}",
-        "END_Y": str(target.year),
-        "END_M": f"{target.month:02d}",
-        "END_D": f"{target.day:02d}",
+        "STA_Y": str(target.year), "STA_M": f"{target.month:02d}", "STA_D": f"{target.day:02d}",
+        "END_Y": str(target.year), "END_M": f"{target.month:02d}", "END_D": f"{target.day:02d}",
     }
-
     for element_id, value in values.items():
         loc = page.locator(f"#{element_id}")
         if not await loc.count():
@@ -127,7 +110,6 @@ async def _clear_all_regions(page: Page) -> None:
     if await clear_button.count():
         await clear_button.click(force=True)
         return
-
     for text in ("전체선택", "전체 선택"):
         loc = page.get_by_text(text, exact=True)
         if await loc.count():
@@ -144,159 +126,120 @@ async def _click_search(page: Page) -> None:
         if not await button.count():
             raise RuntimeError("오피넷 조회 버튼을 찾지 못했습니다.")
         await button.first.click(force=True)
-
     await page.wait_for_load_state("networkidle")
     await page.wait_for_timeout(700)
 
 
-async def _extract_price_from_tables(page: Page, sigungu: str, product_label: str) -> float:
-    target = normalize_sigungu(sigungu)
-    target_candidates = [target]
-    if " " in target:
-        target_candidates.append(target.split(" ")[0])
+def _parse_number(text: str) -> Optional[float]:
+    match = re.search(r"\d+(?:\.\d+)?", text.replace(",", ""))
+    return float(match.group(0)) if match else None
 
+
+async def _extract_region_price_table(page: Page, product_label: str) -> dict[str, float]:
+    prices: dict[str, float] = {}
     tables = page.locator("table")
+
     for ti in range(await tables.count()):
         table = tables.nth(ti)
         rows = table.locator("tr")
-        if await rows.count() < 2:
+        row_count = await rows.count()
+        if row_count < 2:
             continue
 
-        header_cells = rows.first.locator("th, td")
-        headers = [
-            (await header_cells.nth(i).inner_text()).strip()
-            for i in range(await header_cells.count())
-        ]
-
+        header_row_index: Optional[int] = None
         product_index: Optional[int] = None
-        for i, header in enumerate(headers):
-            if product_label in header:
-                product_index = i
+        for ri in range(min(row_count, 5)):
+            cells = rows.nth(ri).locator("th, td")
+            texts = [re.sub(r"\s+", " ", (await cells.nth(i).inner_text()).strip()) for i in range(await cells.count())]
+            for ci, text in enumerate(texts):
+                if product_label in text:
+                    header_row_index = ri
+                    product_index = ci
+                    break
+            if product_index is not None:
                 break
 
-        for ri in range(1, await rows.count()):
+        if product_index is None or header_row_index is None:
+            continue
+
+        for ri in range(header_row_index + 1, row_count):
             cells = rows.nth(ri).locator("th, td")
-            if await cells.count() < 2:
+            if await cells.count() <= product_index:
                 continue
-
-            texts = [
-                re.sub(r"\s+", " ", (await cells.nth(i).inner_text()).strip())
-                for i in range(await cells.count())
-            ]
-            row_name = texts[0]
-
-            if not any(
-                row_name == c or row_name.startswith(c) or c.startswith(row_name)
-                for c in target_candidates
-            ):
+            texts = [re.sub(r"\s+", " ", (await cells.nth(i).inner_text()).strip()) for i in range(await cells.count())]
+            if not texts:
                 continue
+            row_name = texts[0].strip()
+            if not row_name or row_name in {"지역", "구분", "합계", "평균"}:
+                continue
+            value = _parse_number(texts[product_index])
+            if value is not None:
+                prices[normalize_sigungu(row_name)] = value
 
-            idx = product_index if product_index is not None and product_index < len(texts) else 1
-            raw = texts[idx].replace(",", "")
-            match = re.search(r"\d+(?:\.\d+)?", raw)
-            if match:
-                return float(match.group(0))
-
-    raise RuntimeError(f"오피넷 결과에서 {sigungu} / {product_label} 가격을 찾지 못했습니다.")
+    if not prices:
+        raise RuntimeError(f"오피넷 결과에서 {product_label} 지역별 가격표를 찾지 못했습니다.")
+    return prices
 
 
-async def _query_oil_page(
-    page: Page,
-    travel_date: date,
-    province: str,
-    sigungu: str,
-    vehicle_type: str,
-) -> float:
+async def _prepare_oil_page(page: Page, travel_date: date, province: str, vehicle_type: str) -> None:
     await page.goto(OIL_URL, wait_until="networkidle", timeout=60_000)
     await _select_date(page, travel_date)
     await _clear_all_regions(page)
-
     sido_id = SIDO_IDS.get(province)
     if not sido_id:
         raise ValueError(f"지원하지 않는 시도입니다: {province}")
-
     await _select_by_id_or_label(page, sido_id, province)
-    await _select_by_id_or_label(
-        page, PRODUCT_IDS[vehicle_type], PRODUCT_LABELS[vehicle_type]
-    )
+    await _select_by_id_or_label(page, PRODUCT_IDS[vehicle_type], PRODUCT_LABELS[vehicle_type])
     await _click_search(page)
 
-    return await _extract_price_from_tables(
-        page, sigungu, PRODUCT_LABELS[vehicle_type]
-    )
 
-
-async def _query_lpg_page(
-    page: Page,
-    travel_date: date,
-    province: str,
-    sigungu: str,
-) -> float:
+async def _prepare_lpg_page(page: Page, travel_date: date, province: str) -> None:
     await page.goto(LPG_URL, wait_until="networkidle", timeout=60_000)
     await _select_date(page, travel_date)
     await _clear_all_regions(page)
-
     base_id = SIDO_IDS.get(province)
     if not base_id:
         raise ValueError(f"지원하지 않는 시도입니다: {province}")
-
     try:
         await _select_by_id_or_label(page, f"area_{base_id}", province)
     except Exception:
         await _select_by_id_or_label(page, base_id, province)
-
     await _click_search(page)
-    return await _extract_price_from_tables(page, sigungu, PRODUCT_LABELS["lpg"])
 
 
-async def query_opinet_price(
+async def query_opinet_region_prices(
     travel_date: date,
     province_name: str,
-    sigungu_name: str,
     vehicle_type: str,
     evidence_dir: str = "/tmp/evidence",
-) -> OpinetResult:
+) -> OpinetRegionResult:
     if vehicle_type not in {"gasoline", "diesel", "lpg"}:
         raise ValueError("OPINET 조회 대상 차량이 아닙니다.")
 
     province = normalize_province(province_name)
-    sigungu = normalize_sigungu(sigungu_name)
     product_label = PRODUCT_LABELS[vehicle_type]
-
-    safe_sigungu = re.sub(r"[^0-9A-Za-z가-힣_-]+", "_", sigungu)
     output_dir = Path(evidence_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    evidence_path = output_dir / (
-        f"opinet_{travel_date.isoformat()}_{province}_{safe_sigungu}_{vehicle_type}.png"
-    )
+    evidence_path = output_dir / f"opinet_{travel_date.isoformat()}_{province}_{vehicle_type}.png"
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
-        )
-        context = await browser.new_context(
-            viewport={"width": 1440, "height": 1600},
-            locale="ko-KR",
-        )
+        browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+        context = await browser.new_context(viewport={"width": 1440, "height": 1600}, locale="ko-KR")
         page = await context.new_page()
-
         if vehicle_type == "lpg":
-            price = await _query_lpg_page(page, travel_date, province, sigungu)
+            await _prepare_lpg_page(page, travel_date, province)
             source_url = LPG_URL
         else:
-            price = await _query_oil_page(
-                page, travel_date, province, sigungu, vehicle_type
-            )
+            await _prepare_oil_page(page, travel_date, province, vehicle_type)
             source_url = OIL_URL
 
+        prices = await _extract_region_price_table(page, product_label)
         await page.screenshot(path=str(evidence_path), full_page=True)
         await browser.close()
 
-    return OpinetResult(
-        price=price,
+    return OpinetRegionResult(
+        prices=prices,
         province=province,
-        sigungu=sigungu,
         product_label=product_label,
         evidence_path=str(evidence_path),
         source_url=source_url,
