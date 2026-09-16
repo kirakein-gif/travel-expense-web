@@ -1,0 +1,36 @@
+{
+  "version": "draft-2026-09-16",
+  "distance_unit": "km",
+  "distance_values_are": "one_way",
+  "notes": [
+    "충남 관내 관외출장은 소속 지역 교육지원청과 출장지 지역 교육지원청(또는 별도 고정지점) 간 공식 고정거리를 우선 적용한다.",
+    "distances_km 값은 충청남도교육청의 공식 거리표를 확인한 뒤 입력한다.",
+    "내포는 일반 행정구역명이 아니므로 별도 목적지 코드 NAEPO로 관리한다."
+  ],
+  "special_destinations": {
+    "NAEPO": {
+      "label": "내포",
+      "aliases": ["내포", "내포신도시", "충남교육청", "충청남도교육청"],
+      "canonical_address": "충남 홍성군 홍북읍 선화로 22",
+      "canonical_sigungu": "홍성군",
+      "description": "내포 고정 기준점. 현재 기준점은 충청남도교육청 주소."
+    }
+  },
+  "support_offices": {
+    "CHEONAN": {"label": "천안교육지원청", "sigungu": ["천안시"]},
+    "GONGJU": {"label": "공주교육지원청", "sigungu": ["공주시"]},
+    "BORYEONG": {"label": "보령교육지원청", "sigungu": ["보령시"]},
+    "ASAN": {"label": "아산교육지원청", "sigungu": ["아산시"]},
+    "SEOSAN": {"label": "서산교육지원청", "sigungu": ["서산시"]},
+    "NONSAN_GYERYONG": {"label": "논산계룡교육지원청", "sigungu": ["논산시", "계룡시"]},
+    "DANGJIN": {"label": "당진교육지원청", "sigungu": ["당진시"]},
+    "GEUMSAN": {"label": "금산교육지원청", "sigungu": ["금산군"]},
+    "BUYEO": {"label": "부여교육지원청", "sigungu": ["부여군"]},
+    "SEOCHEON": {"label": "서천교육지원청", "sigungu": ["서천군"]},
+    "CHEONGYANG": {"label": "청양교육지원청", "sigungu": ["청양군"]},
+    "HONGSEONG": {"label": "홍성교육지원청", "sigungu": ["홍성군"]},
+    "YESAN": {"label": "예산교육지원청", "sigungu": ["예산군"]},
+    "TAEAN": {"label": "태안교육지원청", "sigungu": ["태안군"]}
+  },
+  "distances_km": {}
+}
