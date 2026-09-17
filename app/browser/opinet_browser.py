@@ -57,6 +57,14 @@ def normalize_sigungu(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip())
 
 
+def _province_option_candidates(province: str) -> list[str]:
+    values = [province]
+    for long_name, short_name in PROVINCE_ALIASES.items():
+        if short_name == province and long_name not in values:
+            values.append(long_name)
+    return values
+
+
 async def _select_by_id_or_label(page: Page, element_id: str, label_text: str) -> None:
     labels = page.locator("label", has_text=label_text)
     for i in range(await labels.count()):
@@ -117,6 +125,50 @@ async def _clear_all_regions(page: Page) -> None:
             return
 
 
+async def _select_province_dropdown(page: Page, province: str) -> None:
+    """Select the province in OPINET's 시도/시군구 drill-down selects.
+
+    The page currently has both province checkboxes and a separate pair of
+    region selects. Province checkboxes produce the nationwide 시도 average
+    table; the select control is what drills into 시군구 rows.
+    """
+    candidates = _province_option_candidates(province)
+    selects = page.locator("select")
+    matches: list[tuple[int, str]] = []
+
+    for si in range(await selects.count()):
+        select = selects.nth(si)
+        options = select.locator("option")
+        option_count = await options.count()
+        if option_count < 2:
+            continue
+
+        texts = [
+            re.sub(r"\s+", " ", (await options.nth(oi).inner_text()).strip())
+            for oi in range(option_count)
+        ]
+        for candidate in candidates:
+            if candidate in texts:
+                matches.append((si, candidate))
+                break
+
+    if not matches:
+        raise RuntimeError(f"오피넷 시도 선택 드롭다운에서 {province}을(를) 찾지 못했습니다.")
+
+    # Prefer a visible select because the page can contain hidden duplicate controls.
+    selected_index: Optional[int] = None
+    selected_label: Optional[str] = None
+    for si, label in matches:
+        if await selects.nth(si).is_visible():
+            selected_index, selected_label = si, label
+            break
+    if selected_index is None:
+        selected_index, selected_label = matches[0]
+
+    await selects.nth(selected_index).select_option(label=selected_label)
+    await page.wait_for_timeout(900)
+
+
 async def _click_search(page: Page) -> None:
     button = page.locator("#btn_Search")
     if await button.count():
@@ -127,7 +179,7 @@ async def _click_search(page: Page) -> None:
             raise RuntimeError("오피넷 조회 버튼을 찾지 못했습니다.")
         await button.first.click(force=True)
     await page.wait_for_load_state("networkidle")
-    await page.wait_for_timeout(700)
+    await page.wait_for_timeout(900)
 
 
 def _parse_number(text: str) -> Optional[float]:
@@ -148,9 +200,12 @@ async def _extract_region_price_table(page: Page, product_label: str) -> dict[st
 
         header_row_index: Optional[int] = None
         product_index: Optional[int] = None
-        for ri in range(min(row_count, 5)):
+        for ri in range(min(row_count, 7)):
             cells = rows.nth(ri).locator("th, td")
-            texts = [re.sub(r"\s+", " ", (await cells.nth(i).inner_text()).strip()) for i in range(await cells.count())]
+            texts = [
+                re.sub(r"\s+", " ", (await cells.nth(i).inner_text()).strip())
+                for i in range(await cells.count())
+            ]
             for ci, text in enumerate(texts):
                 if product_label in text:
                     header_row_index = ri
@@ -166,7 +221,10 @@ async def _extract_region_price_table(page: Page, product_label: str) -> dict[st
             cells = rows.nth(ri).locator("th, td")
             if await cells.count() <= product_index:
                 continue
-            texts = [re.sub(r"\s+", " ", (await cells.nth(i).inner_text()).strip()) for i in range(await cells.count())]
+            texts = [
+                re.sub(r"\s+", " ", (await cells.nth(i).inner_text()).strip())
+                for i in range(await cells.count())
+            ]
             if not texts:
                 continue
             row_name = texts[0].strip()
@@ -184,26 +242,39 @@ async def _extract_region_price_table(page: Page, product_label: str) -> dict[st
 async def _prepare_oil_page(page: Page, travel_date: date, province: str, vehicle_type: str) -> None:
     await page.goto(OIL_URL, wait_until="networkidle", timeout=60_000)
     await _select_date(page, travel_date)
-    await _clear_all_regions(page)
-    sido_id = SIDO_IDS.get(province)
-    if not sido_id:
-        raise ValueError(f"지원하지 않는 시도입니다: {province}")
-    await _select_by_id_or_label(page, sido_id, province)
-    await _select_by_id_or_label(page, PRODUCT_IDS[vehicle_type], PRODUCT_LABELS[vehicle_type])
+
+    # Current OPINET has two region controls. The checkbox list compares
+    # province averages, while the 시도 select drills down to 시군구.
+    await _select_province_dropdown(page, province)
+
+    # Product selection is retained for a cleaner evidence screen. If OPINET
+    # changes the duplicate checkbox layout, extraction still targets the
+    # requested product column from the resulting table.
+    try:
+        await _select_by_id_or_label(page, PRODUCT_IDS[vehicle_type], PRODUCT_LABELS[vehicle_type])
+    except Exception:
+        pass
+
     await _click_search(page)
 
 
 async def _prepare_lpg_page(page: Page, travel_date: date, province: str) -> None:
     await page.goto(LPG_URL, wait_until="networkidle", timeout=60_000)
     await _select_date(page, travel_date)
-    await _clear_all_regions(page)
-    base_id = SIDO_IDS.get(province)
-    if not base_id:
-        raise ValueError(f"지원하지 않는 시도입니다: {province}")
+
     try:
-        await _select_by_id_or_label(page, f"area_{base_id}", province)
+        await _select_province_dropdown(page, province)
     except Exception:
-        await _select_by_id_or_label(page, base_id, province)
+        # Keep the old checkbox path as fallback on the LPG statistics page.
+        await _clear_all_regions(page)
+        base_id = SIDO_IDS.get(province)
+        if not base_id:
+            raise ValueError(f"지원하지 않는 시도입니다: {province}")
+        try:
+            await _select_by_id_or_label(page, f"area_{base_id}", province)
+        except Exception:
+            await _select_by_id_or_label(page, base_id, province)
+
     await _click_search(page)
 
 
@@ -223,9 +294,16 @@ async def query_opinet_region_prices(
     evidence_path = output_dir / f"opinet_{travel_date.isoformat()}_{province}_{vehicle_type}.png"
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
-        context = await browser.new_context(viewport={"width": 1440, "height": 1600}, locale="ko-KR")
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
+        context = await browser.new_context(
+            viewport={"width": 1440, "height": 1600},
+            locale="ko-KR",
+        )
         page = await context.new_page()
+
         if vehicle_type == "lpg":
             await _prepare_lpg_page(page, travel_date, province)
             source_url = LPG_URL
