@@ -68,7 +68,11 @@ async def _request(endpoint: str, **extra: str) -> list[dict[str, Any]]:
     if not OPINET_API_KEY:
         raise RuntimeError("OPINET_API_KEY가 설정되지 않았습니다.")
 
-    params = {"out": "json", "code": OPINET_API_KEY}
+    params = {"out": "json"}
+    if endpoint == AREA_CODE_ENDPOINT:
+        params["certkey"] = OPINET_API_KEY
+    else:
+        params["code"] = OPINET_API_KEY
     params.update({key: value for key, value in extra.items() if value})
 
     async with httpx.AsyncClient(timeout=20) as client:
