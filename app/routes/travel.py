@@ -2,7 +2,7 @@ import os
 import shutil
 import tempfile
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.models import (
@@ -17,6 +17,7 @@ from app.services.opinet_api_service import check_opinet_api_status
 from app.services.opinet_evidence_service import generate_opinet_evidence
 from app.services.pdf_service import generate_estimate_pdf
 from app.services.travel_service import estimate_travel, resolve_distance, resolve_price
+from app.services.travel_pdf_import import parse_travel_pdf
 
 router = APIRouter(tags=["travel"])
 
@@ -29,6 +30,22 @@ def _evidence_vehicle(req: TravelRequest) -> str | None:
     if req.vehicle_type == "phev" and req.phev_energy_source == "gasoline":
         return "gasoline"
     return None
+
+
+@router.post("/import-travel-pdf")
+async def import_travel_pdf(file: UploadFile = File(...)):
+    filename = file.filename or "출장신청서.pdf"
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="빈 파일입니다.")
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="PDF 파일은 15MB 이하만 업로드할 수 있습니다.")
+    try:
+        return parse_travel_pdf(data, filename)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"출장신청서 분석 실패: {e}")
 
 
 @router.get("/opinet-status")
