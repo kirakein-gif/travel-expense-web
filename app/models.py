@@ -36,6 +36,7 @@ class TravelRequest(BaseModel):
     affiliation: Optional[str] = None
     position: Optional[str] = None
     traveler_name: Optional[str] = None
+    passengers: Optional[str] = None
     purpose: Optional[str] = None
 
 
