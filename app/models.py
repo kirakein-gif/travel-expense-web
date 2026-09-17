@@ -8,6 +8,7 @@ VehicleType = Literal[
 ]
 PhevEnergySource = Literal["gasoline", "electric"]
 TripType = Literal["normal", "training"]
+TrainingStayMode = Literal["nonresidential", "residential", "custom"]
 
 
 class TravelRequest(BaseModel):
@@ -23,7 +24,8 @@ class TravelRequest(BaseModel):
     trip_type: TripType = "normal"
     public_vehicle: bool = False
     provided_meals_count: int = Field(default=0, ge=0)
-    training_residential: bool = False
+    training_stay_mode: TrainingStayMode = "nonresidential"
+    training_round_trips: Optional[int] = Field(default=None, ge=1)
     training_meal_claim_amount: int = Field(default=0, ge=0)
 
     toll_fee: int = Field(default=0, ge=0)
@@ -37,6 +39,7 @@ class TravelRequest(BaseModel):
 
 
 class DistanceResponse(BaseModel):
+    one_way_distance_km: float
     distance_km: float
     distance_source: str
     destination_code: Optional[str] = None
@@ -60,6 +63,8 @@ class PriceRequest(BaseModel):
     phev_energy_source: Optional[PhevEnergySource] = None
     efficiency: Optional[float] = Field(default=None, gt=0)
     distance_km: float = Field(gt=0)
+    one_way_distance_km: Optional[float] = Field(default=None, gt=0)
+    round_trip: bool = True
     province: str = Field(min_length=1)
     sigungu: str = Field(min_length=1)
     origin_sigungu: str = ""
@@ -67,7 +72,8 @@ class PriceRequest(BaseModel):
     trip_type: TripType = "normal"
     public_vehicle: bool = False
     provided_meals_count: int = Field(default=0, ge=0)
-    training_residential: bool = False
+    training_stay_mode: TrainingStayMode = "nonresidential"
+    training_round_trips: Optional[int] = Field(default=None, ge=1)
     training_meal_claim_amount: int = Field(default=0, ge=0)
 
     toll_fee: int = Field(default=0, ge=0)
@@ -86,6 +92,8 @@ class PriceResponse(BaseModel):
     effective_efficiency: Optional[float] = None
     efficiency_unit: Optional[str] = None
     calculation_formula: Optional[str] = None
+    transport_distance_km: float = 0
+    round_trip_count: float = 0
 
     trip_days: int = 1
     daily_allowance: int = 0

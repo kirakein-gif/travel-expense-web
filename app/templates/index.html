@@ -12,359 +12,347 @@
     <div>
       <p class="eyebrow">TRAVEL EXPENSE AUTOMATION</p>
       <h1>여비정산 자동화</h1>
-      <p class="sub">장소 확인 → 거리 → 운임 → 일비·식비 → 정산 합계까지 순서대로 계산합니다.</p>
+      <p class="sub">거리와 여비 규칙을 단계별로 확인한 뒤 증빙과 PDF를 만듭니다.</p>
     </div>
-    <div class="badge">v0.6 SETTLEMENT</div>
+    <div class="badge">v0.7 TABS</div>
   </section>
 
-  <section class="grid">
-    <form id="travelForm" class="card">
-      <h2>출장 정보</h2>
+  <nav class="tabs" aria-label="여비정산 단계">
+    <button class="tab active" data-tab="1"><span>1</span>출장·거리 <b id="tab1check"></b></button>
+    <button class="tab" data-tab="2"><span>2</span>여비 상세 <b id="tab2check"></b></button>
+    <button class="tab" data-tab="3"><span>3</span>결과·증빙</button>
+  </nav>
 
-      <div class="two">
-        <label>출장 시작일<input id="travel_date" type="date" required></label>
-        <label>출장 종료일<input id="end_date" type="date" required></label>
-      </div>
-      <label>출발지<input id="origin" type="text" placeholder="예: 천안버들유치원" required></label>
-      <label>출장지<input id="destination" type="text" placeholder="예: 홍성교육지원청 또는 내포" required></label>
-      <label>출장 목적<input id="purpose" type="text" placeholder="예: 연수 참석, 협의회 참석"></label>
+  <div id="globalStatus" class="status top-status">출장 정보를 입력해주세요.</div>
 
-      <div class="section-label">신청인 정보 · PDF용 선택사항</div>
-      <div class="two">
-        <label>소속<input id="affiliation" type="text" placeholder="예: 천안버들유치원"></label>
-        <label>직급(직위)<input id="position" type="text" placeholder="예: 주무관"></label>
-      </div>
-      <label>성명<input id="traveler_name" type="text" placeholder="성명"></label>
-
-      <div class="section-label">출장 유형</div>
-      <label>구분
-        <select id="trip_type">
-          <option value="normal">일반출장</option>
-          <option value="training">교육훈련</option>
-        </select>
-      </label>
-      <label class="check"><input id="public_vehicle" type="checkbox">공용차량 이용 · 일비 50% 감액</label>
-
-      <div id="normalMealOptions">
-        <label>제공 식사 수
-          <input id="provided_meals_count" type="number" min="0" step="1" value="0">
-          <span class="help">전체 출장기간 기준. 1식당 해당 일 식비의 1/3을 감액합니다.</span>
+  <section id="tab1" class="tab-panel active">
+    <div class="grid">
+      <section class="card">
+        <h2>출장·거리</h2>
+        <div class="two">
+          <label>출장 시작일<input id="travel_date" type="date" required></label>
+          <label>출장 종료일<input id="end_date" type="date" required></label>
+        </div>
+        <label>출발지<input id="origin" type="text" placeholder="예: 천안버들유치원" required></label>
+        <label>출장지<input id="destination" type="text" placeholder="예: 충청남도교육청" required></label>
+        <label>출장 목적<input id="purpose" type="text" placeholder="예: 협의회 참석"></label>
+        <label>출장 유형
+          <select id="trip_type">
+            <option value="normal">일반출장</option>
+            <option value="training">교육훈련</option>
+          </select>
         </label>
-      </div>
 
-      <div id="trainingOptions" class="hidden">
-        <label class="check"><input id="training_residential" type="checkbox">합숙 또는 기숙사 이용</label>
-        <label>교육훈련기관 식비 청구액
-          <input id="training_meal_claim_amount" type="number" min="0" step="1" value="0">
-          <span class="help">기관 청구액이 있는 경우 입력합니다. 근무지내/외 및 합숙 여부에 따라 기준표를 자동 적용합니다.</span>
+        <div class="section-label">차량</div>
+        <label>차량 종류
+          <select id="vehicle_type">
+            <option value="gasoline">휘발유</option>
+            <option value="diesel">경유</option>
+            <option value="lpg">LPG</option>
+            <option value="hybrid">하이브리드</option>
+            <option value="phev">플러그인하이브리드</option>
+            <option value="electric">전기</option>
+            <option value="hydrogen">수소</option>
+          </select>
         </label>
-        <div class="inline-note">근무지내/외는 출발지와 교육훈련기관의 시·군을 비교해 자동 판정합니다.</div>
-      </div>
+        <label id="phevEnergyWrap" class="hidden">플러그인하이브리드 사용 에너지원
+          <select id="phev_energy_source">
+            <option value="gasoline">휘발유 사용</option>
+            <option value="electric">전기충전 사용</option>
+          </select>
+        </label>
+        <label>적용 연비 / 전비
+          <input id="efficiency" type="text" readonly>
+          <span class="help">제공해주신 승용차 유종별 연비(전비) 기준을 자동 적용합니다.</span>
+        </label>
+        <label id="roundTripWrap" class="check"><input id="round_trip" type="checkbox" checked>왕복으로 계산</label>
+        <button id="distanceButton" type="button">거리 확인 후 다음</button>
+      </section>
 
-      <div class="section-label">자동차 운임</div>
-      <label>차량 종류
-        <select id="vehicle_type">
-          <option value="gasoline">휘발유</option>
-          <option value="diesel">경유</option>
-          <option value="lpg">LPG</option>
-          <option value="hybrid">하이브리드</option>
-          <option value="phev">플러그인하이브리드</option>
-          <option value="electric">전기</option>
-          <option value="hydrogen">수소</option>
-        </select>
-      </label>
-      <label id="phevEnergyWrap" class="hidden">플러그인하이브리드 사용 에너지원
-        <select id="phev_energy_source">
-          <option value="gasoline">휘발유 사용</option>
-          <option value="electric">전기충전 사용</option>
-        </select>
-      </label>
-      <label>적용 연비 / 전비
-        <input id="efficiency" type="text" readonly>
-        <span class="help">한국에너지공단 통계 기준값을 차량 선택에 따라 자동 적용합니다.</span>
-      </label>
-      <label class="check"><input id="round_trip" type="checkbox" checked>왕복으로 계산</label>
+      <section class="card result compact-result">
+        <h2>거리 확인</h2>
+        <div class="hint">기관명은 카카오 장소검색으로 주소·좌표를 확인하고, 충남 내부는 고정거리표를 우선 적용합니다.</div>
+        <dl>
+          <div><dt>출발지 확인</dt><dd id="resolved_origin">-</dd></div>
+          <div><dt>출장지 확인</dt><dd id="resolved_destination">-</dd></div>
+          <div><dt>편도 기준거리</dt><dd id="one_way_distance">-</dd></div>
+          <div><dt>거리 기준</dt><dd id="distance_source">-</dd></div>
+          <div><dt>기준 목적지</dt><dd id="destination_code">-</dd></div>
+        </dl>
+      </section>
+    </div>
+  </section>
 
-      <div class="section-label">직접 입력 비용</div>
-      <div class="two">
-        <label>통행료<input id="toll_fee" type="number" min="0" step="1" value="0"></label>
-        <label>주차료<input id="parking_fee" type="number" min="0" step="1" value="0"></label>
-      </div>
-      <label>숙박비<input id="lodging_fee" type="number" min="0" step="1" value="0"></label>
+  <section id="tab2" class="tab-panel">
+    <div class="grid">
+      <section class="card">
+        <h2>여비 상세</h2>
+        <div id="normalOptions">
+          <div class="section-label">일반출장</div>
+          <label>제공 식사 수
+            <input id="provided_meals_count" type="number" min="0" step="1" value="0">
+            <span class="help">1식 제공 시 해당 식비에서 1일 식비의 1/3을 감액합니다.</span>
+          </label>
+        </div>
 
-      <button id="calculateButton" type="submit">자동 계산</button>
-      <button id="evidenceButton" type="button" disabled style="margin-top:10px;background:#0f766e">오피넷 증빙 생성</button>
-      <button id="pdfButton" type="button" disabled style="margin-top:10px;background:#475569">PDF 여비정산서</button>
-    </form>
+        <div id="trainingOptions" class="hidden">
+          <div class="section-label">교육훈련</div>
+          <label>숙박 방식
+            <select id="training_stay_mode">
+              <option value="nonresidential">전일 비숙박 · 매일 왕복</option>
+              <option value="residential">전일 숙박 · 첫날 출발/마지막날 귀가</option>
+              <option value="custom">혼합 · 왕복 횟수 직접 지정</option>
+            </select>
+          </label>
+          <label id="customRoundTripsWrap" class="hidden">자동차 왕복 횟수
+            <input id="training_round_trips" type="number" min="1" step="1" value="1">
+            <span class="help">예: 3일 교육 중 일부만 숙박하여 총 2번 왕복하면 2를 입력합니다.</span>
+          </label>
+          <div id="trainingTripHint" class="inline-note"></div>
+          <label>교육훈련기관 식비 청구액
+            <input id="training_meal_claim_amount" type="number" min="0" step="1" value="0">
+            <span class="help">교육훈련기관에서 식비를 청구한 경우만 입력합니다.</span>
+          </label>
+        </div>
 
-    <section class="card result">
-      <h2>산출 결과</h2>
-      <div id="status" class="status">출장 정보를 입력하고 자동 계산을 눌러주세요.</div>
-      <dl>
-        <div><dt>출발지 확인</dt><dd id="resolved_origin">-</dd></div>
-        <div><dt>출장지 확인</dt><dd id="resolved_destination">-</dd></div>
-        <div><dt>총 운행거리</dt><dd id="distance">-</dd></div>
-        <div><dt>거리 기준</dt><dd id="distance_source">-</dd></div>
-        <div><dt>기준 목적지</dt><dd id="destination_code">-</dd></div>
-        <div><dt>차량·연비</dt><dd id="vehicle_spec">-</dd></div>
-        <div><dt>적용단가</dt><dd id="price">-</dd></div>
-        <div><dt>자동차운임 산식</dt><dd id="formula" class="formula">-</dd></div>
-        <div><dt>자동차운임</dt><dd id="amount">-</dd></div>
-        <div><dt>출장일수</dt><dd id="trip_days">-</dd></div>
-        <div><dt>교육훈련 구분</dt><dd id="training_scope">-</dd></div>
-        <div><dt>일비</dt><dd id="daily_allowance">-</dd></div>
-        <div><dt>식비</dt><dd id="meal_allowance">-</dd></div>
-        <div><dt>통행료</dt><dd id="toll_result">-</dd></div>
-        <div><dt>주차료</dt><dd id="parking_result">-</dd></div>
-        <div><dt>숙박비</dt><dd id="lodging_result">-</dd></div>
-        <div><dt>합계</dt><dd id="total_expense" class="total">-</dd></div>
-        <div><dt>가격출처</dt><dd id="source">-</dd></div>
-        <div><dt>증빙상태</dt><dd id="evidence">-</dd></div>
-      </dl>
-    </section>
+        <label class="check"><input id="public_vehicle" type="checkbox">공용차량 이용</label>
+        <span class="help standalone">공용차량 사용 시 일비는 50% 감액하고 자가용 자동차운임은 지급하지 않는 것으로 계산합니다.</span>
+
+        <div class="section-label">직접 입력 비용</div>
+        <div class="two">
+          <label>통행료<input id="toll_fee" type="number" min="0" step="1" value="0"></label>
+          <label>주차료<input id="parking_fee" type="number" min="0" step="1" value="0"></label>
+        </div>
+        <label>숙박비<input id="lodging_fee" type="number" min="0" step="1" value="0"></label>
+
+        <details class="optional-box">
+          <summary>신청인 정보 · 최종 PDF용</summary>
+          <div class="two">
+            <label>소속<input id="affiliation" type="text" placeholder="예: 천안버들유치원"></label>
+            <label>직급(직위)<input id="position" type="text" placeholder="예: 주무관"></label>
+          </div>
+          <label>성명<input id="traveler_name" type="text" placeholder="성명"></label>
+        </details>
+
+        <div class="button-row">
+          <button class="secondary" data-go="1" type="button">이전</button>
+          <button id="calculateButton" type="button">여비 계산</button>
+        </div>
+      </section>
+
+      <section class="card result compact-result">
+        <h2>적용 규칙 미리보기</h2>
+        <dl>
+          <div><dt>출장일수</dt><dd id="preview_days">-</dd></div>
+          <div><dt>출장유형</dt><dd id="preview_type">-</dd></div>
+          <div><dt>예상 왕복횟수</dt><dd id="preview_round_trips">-</dd></div>
+          <div><dt>차량·연비</dt><dd id="preview_vehicle">-</dd></div>
+          <div><dt>일비 기준</dt><dd id="preview_daily">-</dd></div>
+          <div><dt>식비 기준</dt><dd id="preview_meal">-</dd></div>
+        </dl>
+      </section>
+    </div>
+  </section>
+
+  <section id="tab3" class="tab-panel">
+    <div class="grid">
+      <section class="card result">
+        <h2>최종 산출 목록</h2>
+        <dl>
+          <div><dt>출발지</dt><dd id="final_origin">-</dd></div>
+          <div><dt>출장지</dt><dd id="final_destination">-</dd></div>
+          <div><dt>편도 기준거리</dt><dd id="final_one_way">-</dd></div>
+          <div><dt>왕복 횟수</dt><dd id="final_round_trips">-</dd></div>
+          <div><dt>자동차운임 적용거리</dt><dd id="final_transport_distance">-</dd></div>
+          <div><dt>차량·연비</dt><dd id="vehicle_spec">-</dd></div>
+          <div><dt>적용단가</dt><dd id="price">-</dd></div>
+          <div><dt>자동차운임 산식</dt><dd id="formula" class="formula">-</dd></div>
+          <div><dt>자동차운임</dt><dd id="amount">-</dd></div>
+          <div><dt>일비</dt><dd id="daily_allowance">-</dd></div>
+          <div><dt>일비 근거</dt><dd id="daily_note" class="note-value">-</dd></div>
+          <div><dt>식비</dt><dd id="meal_allowance">-</dd></div>
+          <div><dt>식비 근거</dt><dd id="meal_note" class="note-value">-</dd></div>
+          <div><dt>통행료</dt><dd id="toll_result">-</dd></div>
+          <div><dt>주차료</dt><dd id="parking_result">-</dd></div>
+          <div><dt>숙박비</dt><dd id="lodging_result">-</dd></div>
+          <div><dt>합계</dt><dd id="total_expense" class="total">-</dd></div>
+          <div><dt>가격출처</dt><dd id="source">-</dd></div>
+          <div><dt>증빙상태</dt><dd id="evidence">-</dd></div>
+        </dl>
+      </section>
+
+      <section class="card">
+        <h2>증빙·출력</h2>
+        <div class="hint">현재는 계산 목록과 증빙을 검증하는 단계입니다. 최종 2페이지 여비신청서 PDF 레이아웃은 이 값들이 안정된 뒤 적용합니다.</div>
+        <button id="evidenceButton" type="button" disabled class="teal">오피넷 증빙 생성</button>
+        <button id="pdfButton" type="button" disabled class="dark">현재 산출내역 PDF (임시)</button>
+        <button class="secondary full" data-go="2" type="button">여비 상세로 돌아가기</button>
+      </section>
+    </div>
   </section>
 </main>
 
 <script>
-const form = document.getElementById("travelForm");
-const calculateButton = document.getElementById("calculateButton");
-const evidenceButton = document.getElementById("evidenceButton");
-const pdfButton = document.getElementById("pdfButton");
+const $ = id => document.getElementById(id);
 const fmt = n => n == null ? "-" : Number(n).toLocaleString("ko-KR");
+let lastDistance = null;
 let lastPayload = null;
 let lastEvidencePayload = null;
 
 const VEHICLE_SPECS = {
-  gasoline: {label:"휘발유", efficiency:11.97, unit:"km/L", evidence:"gasoline"},
-  diesel: {label:"경유", efficiency:12.52, unit:"km/L", evidence:"diesel"},
-  lpg: {label:"LPG", efficiency:8.83, unit:"km/L", evidence:"lpg"},
-  hybrid: {label:"하이브리드", efficiency:15.37, unit:"km/L", evidence:"gasoline"},
-  electric: {label:"전기", efficiency:5.22, unit:"km/kWh", evidence:null},
-  hydrogen: {label:"수소", efficiency:94.9, unit:"km/kg", evidence:null}
+  gasoline:{label:"휘발유",efficiency:11.97,unit:"km/L",evidence:"gasoline"},
+  diesel:{label:"경유",efficiency:12.52,unit:"km/L",evidence:"diesel"},
+  lpg:{label:"LPG",efficiency:8.83,unit:"km/L",evidence:"lpg"},
+  hybrid:{label:"하이브리드",efficiency:15.37,unit:"km/L",evidence:"gasoline"},
+  electric:{label:"전기",efficiency:5.22,unit:"km/kWh",evidence:null},
+  hydrogen:{label:"수소",efficiency:94.9,unit:"km/kg",evidence:null}
 };
 const PHEV_SPECS = {
-  gasoline: {label:"플러그인하이브리드(휘발유)", efficiency:10.61, unit:"km/L", evidence:"gasoline"},
-  electric: {label:"플러그인하이브리드(전기)", efficiency:2.84, unit:"km/kWh", evidence:null}
+  gasoline:{label:"플러그인하이브리드(휘발유)",efficiency:10.61,unit:"km/L",evidence:"gasoline"},
+  electric:{label:"플러그인하이브리드(전기)",efficiency:2.84,unit:"km/kWh",evidence:null}
 };
 
-function currentVehicleSpec() {
-  const type = document.getElementById("vehicle_type").value;
-  if (type === "phev") return PHEV_SPECS[document.getElementById("phev_energy_source").value];
-  return VEHICLE_SPECS[type];
+function currentVehicleSpec(){
+  if($("vehicle_type").value==="phev") return PHEV_SPECS[$("phev_energy_source").value];
+  return VEHICLE_SPECS[$("vehicle_type").value];
 }
-
-function updateVehicleSpec() {
-  const type = document.getElementById("vehicle_type").value;
-  document.getElementById("phevEnergyWrap").classList.toggle("hidden", type !== "phev");
-  const spec = currentVehicleSpec();
-  document.getElementById("efficiency").value = `${spec.efficiency} ${spec.unit}`;
+function days(){
+  const s=new Date($("travel_date").value), e=new Date($("end_date").value);
+  if(!$("travel_date").value||!$("end_date").value) return 1;
+  return Math.max(1,Math.round((e-s)/86400000)+1);
 }
-
-function updateTripType() {
-  const training = document.getElementById("trip_type").value === "training";
-  document.getElementById("trainingOptions").classList.toggle("hidden", !training);
-  document.getElementById("normalMealOptions").classList.toggle("hidden", training);
+function setTab(n){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===String(n)));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.id===`tab${n}`));
+  window.scrollTo({top:0,behavior:'smooth'});
 }
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
+document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.go)));
 
-document.getElementById("vehicle_type").addEventListener("change", updateVehicleSpec);
-document.getElementById("phev_energy_source").addEventListener("change", updateVehicleSpec);
-document.getElementById("trip_type").addEventListener("change", updateTripType);
+function updateVehicle(){
+  const type=$("vehicle_type").value;
+  $("phevEnergyWrap").classList.toggle('hidden',type!=="phev");
+  const s=currentVehicleSpec();
+  $("efficiency").value=`${s.efficiency} ${s.unit}`;
+  updatePreview();
+}
+function suggestedTrainingTrips(){
+  const d=days(), mode=$("training_stay_mode").value;
+  if(mode==="residential") return 1;
+  if(mode==="nonresidential") return d;
+  return Math.min(d,Math.max(1,Number($("training_round_trips").value||1)));
+}
+function updateTripType(){
+  const training=$("trip_type").value==="training";
+  $("normalOptions").classList.toggle('hidden',training);
+  $("trainingOptions").classList.toggle('hidden',!training);
+  $("roundTripWrap").classList.toggle('hidden',training);
+  updateTraining(); updatePreview();
+}
+function updateTraining(){
+  const mode=$("training_stay_mode").value;
+  $("customRoundTripsWrap").classList.toggle('hidden',mode!=="custom");
+  const d=days(), r=suggestedTrainingTrips();
+  if(mode==="nonresidential") $("trainingTripHint").textContent=`${d}일 교육 → 매일 출퇴근 → 왕복 ${r}회`;
+  else if(mode==="residential") $("trainingTripHint").textContent=`${d}일 교육 → 첫날 출발·마지막날 귀가 → 왕복 1회`;
+  else $("trainingTripHint").textContent=`${d}일 교육 → 혼합형 → 왕복 ${r}회`;
+  $("training_round_trips").max=d;
+  updatePreview();
+}
+function updatePreview(){
+  const training=$("trip_type").value==="training", s=currentVehicleSpec(), d=days();
+  $("preview_days").textContent=`${d}일`;
+  $("preview_type").textContent=training?"교육훈련":"일반출장";
+  $("preview_round_trips").textContent=training?`${suggestedTrainingTrips()}회`:($("round_trip").checked?"1회":"편도");
+  $("preview_vehicle").textContent=`${s.label} · ${s.efficiency} ${s.unit}`;
+  $("preview_daily").textContent=training?"등록·수료일 전액 / 중간일 숙박 여부 반영":"25,000원 × 일수";
+  $("preview_meal").textContent=training?"교육훈련 기준 적용":"25,000원/일 · 제공식 1식당 1/3 감액";
+}
+[$("vehicle_type"),$("phev_energy_source")].forEach(el=>el.addEventListener('change',updateVehicle));
+[$("trip_type"),$("travel_date"),$("end_date"),$("round_trip")].forEach(el=>el.addEventListener('change',()=>{updateTripType();updatePreview();}));
+[$("training_stay_mode"),$("training_round_trips")].forEach(el=>el.addEventListener('change',updateTraining));
 
-const today = new Date().toISOString().slice(0,10);
-document.getElementById("travel_date").value = today;
-document.getElementById("end_date").value = today;
-updateVehicleSpec();
-updateTripType();
+const today=new Date().toISOString().slice(0,10); $("travel_date").value=today; $("end_date").value=today; updateVehicle(); updateTripType();
 
-function payloadFromForm() {
-  const spec = currentVehicleSpec();
-  const vehicleType = document.getElementById("vehicle_type").value;
+function basePayload(){
+  const type=$("vehicle_type").value, spec=currentVehicleSpec();
   return {
-    travel_date: document.getElementById("travel_date").value,
-    end_date: document.getElementById("end_date").value,
-    origin: document.getElementById("origin").value,
-    destination: document.getElementById("destination").value,
-    purpose: document.getElementById("purpose").value || null,
-    affiliation: document.getElementById("affiliation").value || null,
-    position: document.getElementById("position").value || null,
-    traveler_name: document.getElementById("traveler_name").value || null,
-    vehicle_type: vehicleType,
-    phev_energy_source: vehicleType === "phev" ? document.getElementById("phev_energy_source").value : null,
-    efficiency: spec.efficiency,
-    round_trip: document.getElementById("round_trip").checked,
-    trip_type: document.getElementById("trip_type").value,
-    public_vehicle: document.getElementById("public_vehicle").checked,
-    provided_meals_count: Number(document.getElementById("provided_meals_count").value || 0),
-    training_residential: document.getElementById("training_residential").checked,
-    training_meal_claim_amount: Number(document.getElementById("training_meal_claim_amount").value || 0),
-    toll_fee: Number(document.getElementById("toll_fee").value || 0),
-    parking_fee: Number(document.getElementById("parking_fee").value || 0),
-    lodging_fee: Number(document.getElementById("lodging_fee").value || 0)
+    travel_date:$("travel_date").value,end_date:$("end_date").value,
+    origin:$("origin").value,destination:$("destination").value,purpose:$("purpose").value||null,
+    vehicle_type:type,phev_energy_source:type==="phev"?$("phev_energy_source").value:null,
+    efficiency:spec.efficiency,round_trip:$("round_trip").checked,trip_type:$("trip_type").value,
+    public_vehicle:$("public_vehicle").checked,provided_meals_count:Number($("provided_meals_count").value||0),
+    training_stay_mode:$("training_stay_mode").value,
+    training_round_trips:$("trip_type").value==="training"&&$("training_stay_mode").value==="custom"?Number($("training_round_trips").value||1):null,
+    training_meal_claim_amount:Number($("training_meal_claim_amount").value||0),
+    toll_fee:Number($("toll_fee").value||0),parking_fee:Number($("parking_fee").value||0),lodging_fee:Number($("lodging_fee").value||0),
+    affiliation:$("affiliation").value||null,position:$("position").value||null,traveler_name:$("traveler_name").value||null
   };
 }
+function placeText(name,address){if(!name&&!address)return"-";if(!name||name===address)return address||name;return `${name} · ${address}`;}
 
-function placeText(name, address) {
-  if (!name && !address) return "-";
-  if (!name || name === address) return address || name;
-  return `${name} · ${address}`;
-}
+$("distanceButton").addEventListener('click',async()=>{
+  if(!$("travel_date").value||!$("end_date").value||$("origin").value.trim().length<2||$("destination").value.trim().length<2){$("globalStatus").textContent="출장일과 출발지·출장지를 확인해주세요.";return;}
+  $("distanceButton").disabled=true; $("globalStatus").textContent="기관명·주소 확인 및 거리 계산 중...";
+  try{
+    const payload=basePayload();
+    const r=await fetch('/api/distance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data=await r.json(); if(!r.ok) throw new Error(data.detail||'거리 계산 실패');
+    lastDistance=data;
+    $("resolved_origin").textContent=placeText(data.resolved_origin_name,data.resolved_origin_address);
+    $("resolved_destination").textContent=placeText(data.resolved_destination_name,data.resolved_destination_address);
+    $("one_way_distance").textContent=`${fmt(data.one_way_distance_km)} km`;
+    $("distance_source").textContent=data.distance_source+(data.distance_cache_hit?' · 캐시':'');
+    $("destination_code").textContent=data.destination_support_office||data.destination_code||data.sigungu||'-';
+    $("tab1check").textContent='✓'; $("globalStatus").textContent="거리 확인 완료 · 여비 상세를 입력해주세요."; setTab(2);
+  }catch(e){$("globalStatus").textContent=e.message;}finally{$("distanceButton").disabled=false;}
+});
 
-function resetResult() {
-  ["resolved_origin","resolved_destination","distance","distance_source","destination_code","vehicle_spec","price","formula","amount","trip_days","training_scope","daily_allowance","meal_allowance","toll_result","parking_result","lodging_result","total_expense","source","evidence"].forEach(id => {
-    document.getElementById(id).textContent = "-";
-  });
-}
-
-form.addEventListener("submit", async e => {
-  e.preventDefault();
-  resetResult();
-  calculateButton.disabled = true;
-  evidenceButton.disabled = true;
-  pdfButton.disabled = true;
-  lastPayload = null;
-  lastEvidencePayload = null;
-  const payload = payloadFromForm();
-
-  try {
-    document.getElementById("status").textContent = "1/2 기관명·주소 확인 및 거리 계산 중...";
-    const distanceResponse = await fetch("/api/distance", {
-      method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload)
-    });
-    const distanceData = await distanceResponse.json();
-    if (!distanceResponse.ok) throw new Error(distanceData.detail || "거리 계산 실패");
-
-    document.getElementById("resolved_origin").textContent = placeText(distanceData.resolved_origin_name, distanceData.resolved_origin_address);
-    document.getElementById("resolved_destination").textContent = placeText(distanceData.resolved_destination_name, distanceData.resolved_destination_address);
-    document.getElementById("distance").textContent = fmt(distanceData.distance_km) + " km";
-    document.getElementById("distance_source").textContent = distanceData.distance_source + (distanceData.distance_cache_hit ? " · 캐시" : "");
-    document.getElementById("destination_code").textContent = distanceData.destination_support_office || distanceData.destination_code || distanceData.sigungu || "-";
-
-    document.getElementById("status").textContent = "거리 계산 완료 · 2/2 운임·일비·식비 계산 중...";
-    const pricePayload = {
-      travel_date: payload.travel_date,
-      end_date: payload.end_date,
-      vehicle_type: payload.vehicle_type,
-      phev_energy_source: payload.phev_energy_source,
-      efficiency: payload.efficiency,
-      distance_km: distanceData.distance_km,
-      province: distanceData.province,
-      sigungu: distanceData.sigungu,
-      origin_sigungu: distanceData.origin_sigungu,
-      trip_type: payload.trip_type,
-      public_vehicle: payload.public_vehicle,
-      provided_meals_count: payload.provided_meals_count,
-      training_residential: payload.training_residential,
-      training_meal_claim_amount: payload.training_meal_claim_amount,
-      toll_fee: payload.toll_fee,
-      parking_fee: payload.parking_fee,
-      lodging_fee: payload.lodging_fee
+$("calculateButton").addEventListener('click',async()=>{
+  if(!lastDistance){$("globalStatus").textContent="먼저 1단계에서 거리를 확인해주세요.";setTab(1);return;}
+  $("calculateButton").disabled=true; $("globalStatus").textContent="운임·일비·식비 계산 중...";
+  try{
+    const payload=basePayload();
+    const pp={
+      travel_date:payload.travel_date,end_date:payload.end_date,vehicle_type:payload.vehicle_type,phev_energy_source:payload.phev_energy_source,
+      efficiency:payload.efficiency,distance_km:lastDistance.distance_km,one_way_distance_km:lastDistance.one_way_distance_km,round_trip:payload.round_trip,
+      province:lastDistance.province,sigungu:lastDistance.sigungu,origin_sigungu:lastDistance.origin_sigungu,
+      trip_type:payload.trip_type,public_vehicle:payload.public_vehicle,provided_meals_count:payload.provided_meals_count,
+      training_stay_mode:payload.training_stay_mode,training_round_trips:payload.training_round_trips,training_meal_claim_amount:payload.training_meal_claim_amount,
+      toll_fee:payload.toll_fee,parking_fee:payload.parking_fee,lodging_fee:payload.lodging_fee
     };
-
-    const priceResponse = await fetch("/api/price", {
-      method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(pricePayload)
-    });
-    const priceData = await priceResponse.json();
-    if (!priceResponse.ok) throw new Error("운임 계산 실패: " + (priceData.detail || "요청 실패"));
-
-    document.getElementById("vehicle_spec").textContent = `${priceData.vehicle_label} · ${priceData.effective_efficiency} ${priceData.efficiency_unit}`;
-    document.getElementById("price").textContent = priceData.energy_price == null ? "공식 단가 연결 예정" : fmt(priceData.energy_price) + " 원";
-    document.getElementById("formula").textContent = priceData.calculation_formula || "단가 연결 후 산식 표시";
-    document.getElementById("amount").textContent = priceData.estimated_transport_cost == null ? "단가 연결 후 계산" : fmt(priceData.estimated_transport_cost) + " 원";
-    document.getElementById("trip_days").textContent = `${priceData.trip_days}일`;
-    document.getElementById("training_scope").textContent = priceData.training_scope || "해당없음";
-    document.getElementById("daily_allowance").textContent = `${fmt(priceData.daily_allowance)} 원 · ${priceData.daily_note || ""}`;
-    document.getElementById("meal_allowance").textContent = `${fmt(priceData.meal_allowance)} 원 · ${priceData.meal_note || ""}`;
-    document.getElementById("toll_result").textContent = fmt(priceData.toll_fee) + " 원";
-    document.getElementById("parking_result").textContent = fmt(priceData.parking_fee) + " 원";
-    document.getElementById("lodging_result").textContent = fmt(priceData.lodging_fee) + " 원";
-    document.getElementById("total_expense").textContent = priceData.total_expense == null ? "자동차 단가 연결 후 계산" : fmt(priceData.total_expense) + " 원";
-    document.getElementById("source").textContent = (priceData.price_source || "-") + (priceData.price_cache_hit ? " · 캐시" : "");
-
-    const spec = currentVehicleSpec();
-    if (spec.evidence && priceData.energy_price != null) {
-      lastEvidencePayload = {
-        travel_date: payload.travel_date,
-        vehicle_type: spec.evidence,
-        province: distanceData.province,
-        sigungu: distanceData.sigungu,
-        expected_price: priceData.energy_price
-      };
-      evidenceButton.disabled = false;
-      document.getElementById("evidence").textContent = "API 가격 확인 · 증빙 생성 대기";
-    } else {
-      document.getElementById("evidence").textContent = priceData.evidence_status;
-    }
-
-    document.getElementById("status").textContent = "계산 완료";
-    lastPayload = payload;
-    pdfButton.disabled = false;
-  } catch (err) {
-    const distanceDone = document.getElementById("distance").textContent !== "-";
-    document.getElementById("status").textContent = distanceDone ? "거리 계산 완료 · " + err.message : err.message;
-  } finally {
-    calculateButton.disabled = false;
-  }
+    const r=await fetch('/api/price',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pp)});
+    const data=await r.json(); if(!r.ok) throw new Error(data.detail||'여비 계산 실패');
+    lastPayload=payload;
+    $("final_origin").textContent=placeText(lastDistance.resolved_origin_name,lastDistance.resolved_origin_address);
+    $("final_destination").textContent=placeText(lastDistance.resolved_destination_name,lastDistance.resolved_destination_address);
+    $("final_one_way").textContent=`${fmt(lastDistance.one_way_distance_km)} km`;
+    $("final_round_trips").textContent=data.round_trip_count===0.5?'편도':`${fmt(data.round_trip_count)}회`;
+    $("final_transport_distance").textContent=`${fmt(data.transport_distance_km)} km`;
+    $("vehicle_spec").textContent=`${data.vehicle_label||currentVehicleSpec().label} · ${data.effective_efficiency||currentVehicleSpec().efficiency} ${data.efficiency_unit||currentVehicleSpec().unit}`;
+    $("price").textContent=data.energy_price==null?'연결 예정':`${fmt(data.energy_price)} 원`;
+    $("formula").textContent=data.calculation_formula||'-';
+    $("amount").textContent=data.estimated_transport_cost==null?'단가 연결 후 계산':`${fmt(data.estimated_transport_cost)} 원`;
+    $("daily_allowance").textContent=`${fmt(data.daily_allowance)} 원`; $("daily_note").textContent=data.daily_note||'-';
+    $("meal_allowance").textContent=`${fmt(data.meal_allowance)} 원`; $("meal_note").textContent=data.meal_note||'-';
+    $("toll_result").textContent=`${fmt(data.toll_fee)} 원`; $("parking_result").textContent=`${fmt(data.parking_fee)} 원`; $("lodging_result").textContent=`${fmt(data.lodging_fee)} 원`;
+    $("total_expense").textContent=data.total_expense==null?'자동차 단가 연결 후 확정':`${fmt(data.total_expense)} 원`;
+    $("source").textContent=(data.price_source||'-')+(data.price_cache_hit?' · 캐시':'');
+    const spec=currentVehicleSpec(); const canEvidence=spec.evidence&&data.energy_price!=null&&!payload.public_vehicle;
+    if(canEvidence){lastEvidencePayload={travel_date:payload.travel_date,vehicle_type:spec.evidence,province:lastDistance.province,sigungu:lastDistance.sigungu,expected_price:data.energy_price};$("evidenceButton").disabled=false;$("evidence").textContent='API 가격 확인 · 증빙 생성 대기';}
+    else{$("evidenceButton").disabled=true;$("evidence").textContent=data.evidence_status;}
+    $("pdfButton").disabled=false; $("tab2check").textContent='✓'; $("globalStatus").textContent="여비 계산 완료"; setTab(3);
+  }catch(e){$("globalStatus").textContent=e.message;}finally{$("calculateButton").disabled=false;}
 });
 
-evidenceButton.addEventListener("click", async () => {
-  if (!lastEvidencePayload) return;
-  evidenceButton.disabled = true;
-  const oldText = evidenceButton.textContent;
-  evidenceButton.textContent = "증빙 생성 중...";
-  document.getElementById("status").textContent = "오피넷 공식 화면을 열어 증빙을 생성하고 있습니다...";
-  document.getElementById("evidence").textContent = "브라우저 증빙 생성 중...";
-  try {
-    const r = await fetch("/api/opinet-evidence.png", {
-      method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(lastEvidencePayload)
-    });
-    if (!r.ok) {
-      const data = await r.json();
-      throw new Error(data.detail || "오피넷 증빙 생성 실패");
-    }
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `오피넷증빙_${lastEvidencePayload.travel_date}_${lastEvidencePayload.sigungu}.png`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    document.getElementById("evidence").textContent = "verified_web_capture";
-    document.getElementById("status").textContent = "증빙 생성 완료 · API 가격과 오피넷 화면 가격 일치 확인";
-  } catch (err) {
-    document.getElementById("evidence").textContent = "evidence_failed";
-    document.getElementById("status").textContent = "증빙 생성 실패 · " + err.message;
-  } finally {
-    evidenceButton.textContent = oldText;
-    evidenceButton.disabled = false;
-  }
+$("evidenceButton").addEventListener('click',async()=>{
+  if(!lastEvidencePayload)return; $("evidenceButton").disabled=true; const old=$("evidenceButton").textContent; $("evidenceButton").textContent='증빙 생성 중...'; $("globalStatus").textContent='오피넷 증빙 화면 생성 중...';
+  try{const r=await fetch('/api/opinet-evidence.png',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(lastEvidencePayload)});if(!r.ok){const d=await r.json();throw new Error(d.detail||'증빙 생성 실패');}const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`오피넷증빙_${lastEvidencePayload.travel_date}_${lastEvidencePayload.sigungu}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$("evidence").textContent='verified_web_capture';$("globalStatus").textContent='증빙 생성 완료';}catch(e){$("evidence").textContent='evidence_failed';$("globalStatus").textContent=`증빙 생성 실패 · ${e.message}`;}finally{$("evidenceButton").textContent=old;$("evidenceButton").disabled=false;}
 });
 
-pdfButton.addEventListener("click", async () => {
-  if (!lastPayload) return;
-  pdfButton.disabled = true;
-  const oldText = pdfButton.textContent;
-  pdfButton.textContent = "PDF 생성 중...";
-  try {
-    const r = await fetch("/api/report.pdf", {
-      method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(lastPayload)
-    });
-    if (!r.ok) {
-      const data = await r.json();
-      throw new Error(data.detail || "PDF 생성 실패");
-    }
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `국내출장_여비정산서_${lastPayload.travel_date}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
-  } catch (err) {
-    document.getElementById("status").textContent = err.message;
-  } finally {
-    pdfButton.textContent = oldText;
-    pdfButton.disabled = false;
-  }
+$("pdfButton").addEventListener('click',async()=>{
+  if(!lastPayload)return; $("pdfButton").disabled=true; const old=$("pdfButton").textContent; $("pdfButton").textContent='PDF 생성 중...';
+  try{const r=await fetch('/api/report.pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(lastPayload)});if(!r.ok){const d=await r.json();throw new Error(d.detail||'PDF 생성 실패');}const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`여비산출내역_${lastPayload.travel_date}.pdf`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){$("globalStatus").textContent=e.message;}finally{$("pdfButton").textContent=old;$("pdfButton").disabled=false;}
 });
 </script>
 </body>

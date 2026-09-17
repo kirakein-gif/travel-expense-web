@@ -61,6 +61,50 @@ def same_work_area(origin_sigungu: str, destination_sigungu: str) -> bool:
     return bool(norm(origin_sigungu)) and norm(origin_sigungu) == norm(destination_sigungu)
 
 
+def training_round_trip_count(
+    *,
+    start_date: date,
+    end_date: date | None,
+    stay_mode: str,
+    custom_round_trips: int | None,
+) -> int:
+    days = trip_days(start_date, end_date)
+    if stay_mode == "residential":
+        return 1
+    if stay_mode == "nonresidential":
+        return days
+    if stay_mode == "custom":
+        if custom_round_trips is None:
+            raise ValueError("교육훈련 혼합형은 왕복 횟수를 입력해야 합니다.")
+        if custom_round_trips < 1 or custom_round_trips > days:
+            raise ValueError(f"교육훈련 왕복 횟수는 1~{days}회 사이여야 합니다.")
+        return custom_round_trips
+    raise ValueError("지원하지 않는 교육훈련 숙박 방식입니다.")
+
+
+def transport_distance(
+    *,
+    one_way_km: float,
+    start_date: date,
+    end_date: date | None,
+    trip_type: str,
+    round_trip: bool,
+    training_stay_mode: str,
+    training_round_trips: int | None,
+) -> tuple[float, float]:
+    if trip_type == "training":
+        count = training_round_trip_count(
+            start_date=start_date,
+            end_date=end_date,
+            stay_mode=training_stay_mode,
+            custom_round_trips=training_round_trips,
+        )
+        return round(one_way_km * 2 * count, 1), float(count)
+
+    count = 1.0 if round_trip else 0.5
+    return round(one_way_km * 2 * count, 1), count
+
+
 def calculate_allowances(
     *,
     start_date: date,
@@ -68,7 +112,8 @@ def calculate_allowances(
     trip_type: str,
     public_vehicle: bool,
     provided_meals_count: int,
-    training_residential: bool,
+    training_stay_mode: str,
+    training_round_trips: int | None,
     training_meal_claim_amount: int,
     origin_sigungu: str,
     destination_sigungu: str,
@@ -77,42 +122,71 @@ def calculate_allowances(
     in_work_area = same_work_area(origin_sigungu, destination_sigungu)
 
     if trip_type == "training":
-        full_days = 1 if days == 1 else 2
-        other_days = max(days - full_days, 0)
-        daily = DAILY_ALLOWANCE_RATE * Decimal(full_days)
-        if not training_residential:
-            daily += DAILY_ALLOWANCE_RATE * Decimal("0.5") * Decimal(other_days)
+        round_trips = training_round_trip_count(
+            start_date=start_date,
+            end_date=end_date,
+            stay_mode=training_stay_mode,
+            custom_round_trips=training_round_trips,
+        )
+
+        if days == 1:
+            daily = DAILY_ALLOWANCE_RATE
+            middle_nonresidential = 0
+        else:
+            middle_days = max(days - 2, 0)
+            if training_stay_mode == "nonresidential":
+                middle_nonresidential = middle_days
+            elif training_stay_mode == "residential":
+                middle_nonresidential = 0
+            else:
+                # 왕복 1회는 전일 숙박과 같고, 추가 왕복 1회마다 중간 비숙박일 1일로 본다.
+                middle_nonresidential = min(max(round_trips - 1, 0), middle_days)
+            daily = DAILY_ALLOWANCE_RATE * Decimal("2")
+            daily += DAILY_ALLOWANCE_RATE * Decimal("0.5") * Decimal(middle_nonresidential)
 
         if public_vehicle:
             daily *= Decimal("0.5")
 
         claim = Decimal(str(max(training_meal_claim_amount, 0)))
-        if training_residential:
+        residential_all = training_stay_mode == "residential"
+        if residential_all:
             meal = claim
-            meal_note = "합숙/기숙사: 교육훈련기관 청구액"
+            meal_note = "전일 숙박: 교육훈련기관 청구 식비"
         elif in_work_area:
             if claim > 0:
                 meal = claim
-                meal_note = "근무지내 비합숙: 교육훈련기관 청구액"
+                meal_note = "근무지내 비숙박/혼합: 교육훈련기관 청구 식비"
             else:
                 meal = (MEAL_ALLOWANCE_RATE / Decimal("3")) * Decimal(days)
-                meal_note = "근무지내 비합숙: 식비의 1/3"
+                meal_note = "근무지내 비숙박/혼합: 식비의 1/3"
         else:
             standard = MEAL_ALLOWANCE_RATE * Decimal(days)
             if claim > 0:
                 meal = max(Decimal("0"), standard - claim)
-                meal_note = "근무지외 비합숙: 중식비 청구액 제외 차액"
+                meal_note = "근무지외 비숙박/혼합: 중식비 청구액 제외 차액"
             else:
                 meal = standard
-                meal_note = "근무지외 비합숙: 중식비 미청구 전액"
+                meal_note = "근무지외 비숙박/혼합: 중식비 미청구 전액"
+
+        stay_label = {
+            "nonresidential": "전일 비숙박",
+            "residential": "전일 숙박",
+            "custom": "혼합",
+        }[training_stay_mode]
+        daily_note = f"{stay_label} · 등록/수료일 전액"
+        if days > 2:
+            daily_note += f" · 중간 비숙박 {middle_nonresidential}일 50%"
+        if public_vehicle:
+            daily_note += " · 공용차량 50% 감액"
 
         return {
             "trip_days": days,
             "daily_allowance": _won(daily),
             "meal_allowance": _won(meal),
             "training_scope": "근무지내" if in_work_area else "근무지외",
-            "daily_note": "등록·수료일 전액, 기타일 " + ("미지급" if training_residential else "50%") + (" · 공용차량 50% 감액" if public_vehicle else ""),
+            "daily_note": daily_note,
             "meal_note": meal_note,
+            "round_trip_count": round_trips,
         }
 
     daily = DAILY_ALLOWANCE_RATE * Decimal(days)
@@ -132,4 +206,5 @@ def calculate_allowances(
         "training_scope": None,
         "daily_note": "25,000원 × 일수" + (" × 50%(공용차량)" if public_vehicle else ""),
         "meal_note": f"25,000원 × {days}일 - 제공식사 {meals}식 × 1/3",
+        "round_trip_count": None,
     }
