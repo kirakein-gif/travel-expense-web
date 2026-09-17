@@ -56,6 +56,12 @@ ADMIN_NAME_REPLACEMENTS = (
     ("제주특별자치도", "제주"),
 )
 
+# Chungnam education-office staff often enter a parent organization plus a
+# familiar short agency name, e.g. "충청남도교육청 충남교육연수원". Kakao may
+# register the same place as either "충남교육연수원" or the official joined
+# name "충청남도교육청교육연수원". Generate both forms before ranking.
+CHUNGNAM_EDU_PARENT_NAMES = ("충청남도교육청", "충남교육청")
+
 
 def _headers():
     if not KAKAO_REST_API_KEY:
@@ -77,6 +83,59 @@ def _name_key(value: str) -> str:
     for full, short in ADMIN_NAME_REPLACEMENTS:
         text = text.replace(_compact(full), _compact(short))
     return text
+
+
+def _unique(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        value = re.sub(r"\s+", " ", (value or "").strip())
+        if not value:
+            continue
+        key = _compact(value)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(value)
+    return result
+
+
+def _institution_query_variants(query: str) -> list[str]:
+    """Build a small set of realistic aliases for institution-place search.
+
+    The original query is always first. Extra variants are intentionally
+    conservative so normal place searches do not multiply API calls.
+    """
+    base = re.sub(r"\s+", " ", (query or "").strip())
+    variants = [base]
+
+    # Space-free form is useful because many Korean public institutions are
+    # registered in Kakao without spaces in the official name.
+    if " " in base:
+        variants.append(_compact(base))
+
+    for parent in CHUNGNAM_EDU_PARENT_NAMES:
+        match = re.match(rf"^{re.escape(parent)}\s*(.+)$", base)
+        if not match:
+            continue
+
+        child = match.group(1).strip()
+        if not child:
+            break
+
+        # Familiar short agency name by itself, e.g. 충남교육연수원.
+        variants.append(child)
+
+        # Canonical official joined name. For a duplicated regional short name
+        # (충남교육연수원), remove only the duplicated '충남' and retain
+        # '교육연수원' -> 충청남도교육청교육연수원.
+        official_child = child
+        if _compact(child).startswith("충남"):
+            official_child = child.replace("충남", "", 1).strip()
+        variants.append(f"충청남도교육청{_compact(official_child)}")
+        break
+
+    return _unique(variants)
 
 
 def _looks_like_address(query: str) -> bool:
@@ -128,8 +187,6 @@ def _keyword_score(query: str, doc: dict, index: int) -> float:
     else:
         score += SequenceMatcher(None, target, name).ratio() * 220
 
-        # Candidate containing the full query can be useful, but it must not
-        # dominate public-institution category/name signals (e.g. bank branch).
         if raw_target and raw_target in raw_name:
             score += 45
         if raw_name and raw_name in raw_target:
@@ -154,42 +211,61 @@ def _keyword_score(query: str, doc: dict, index: int) -> float:
     return score
 
 
-def _best_keyword_document(query: str, docs: list[dict]) -> tuple[dict, float]:
+def _best_keyword_document(query: str, docs: list[dict], variants: list[str] | None = None) -> tuple[dict, float]:
     if not docs:
         raise ValueError(f"장소를 찾을 수 없습니다: {query}")
-    ranked = [(_keyword_score(query, doc, i), doc) for i, doc in enumerate(docs)]
+
+    comparison_queries = variants or [query]
+    ranked: list[tuple[float, dict]] = []
+    for i, doc in enumerate(docs):
+        # A candidate may be an exact match to an official or short-name variant
+        # even when it is only a fuzzy match to the user's literal input.
+        score = max(_keyword_score(q, doc, i) for q in comparison_queries)
+        ranked.append((score, doc))
+
     ranked.sort(key=lambda item: item[0], reverse=True)
     score, doc = ranked[0]
     return doc, score
 
 
-async def _search_keyword(client: httpx.AsyncClient, query: str) -> tuple[dict, float]:
+async def _keyword_documents(client: httpx.AsyncClient, query: str) -> list[dict]:
     r = await client.get(
         KEYWORD_URL,
         headers=_headers(),
         params={"query": query, "size": 15, "sort": "accuracy"},
     )
     r.raise_for_status()
-    docs = r.json().get("documents", [])
-    best, score = _best_keyword_document(query, docs)
+    return r.json().get("documents", [])
 
-    # On a low-confidence result, retry once without spaces. This helps exact
-    # registered place names while keeping API usage to one call normally.
-    compact_query = re.sub(r"\s+", "", query.strip())
-    if score < 500 and compact_query != query.strip():
-        r2 = await client.get(
-            KEYWORD_URL,
-            headers=_headers(),
-            params={"query": compact_query, "size": 15, "sort": "accuracy"},
-        )
-        r2.raise_for_status()
-        more_docs = r2.json().get("documents", [])
-        merged: dict[str, dict] = {}
-        for d in docs + more_docs:
+
+async def _search_keyword(client: httpx.AsyncClient, query: str) -> tuple[dict, float]:
+    variants = _institution_query_variants(query)
+
+    # Always query the user's literal input first.
+    docs = await _keyword_documents(client, variants[0])
+    merged: dict[str, dict] = {}
+    for d in docs:
+        merged[d.get("id") or f"{d.get('x')}|{d.get('y')}|{d.get('place_name')}"] = d
+
+    best, score = _best_keyword_document(query, list(merged.values()), variants)
+
+    # For a recognized parent+short-agency pattern, query the extra aliases even
+    # when the literal result looks superficially confident. This fixes cases
+    # such as '충청남도교육청 충남교육연수원' selecting the parent office.
+    parent_alias_case = len(variants) >= 3 and any(
+        _compact(query).startswith(_compact(parent)) for parent in CHUNGNAM_EDU_PARENT_NAMES
+    )
+
+    # Otherwise, only spend one extra Kakao call when confidence is weak.
+    extra_variants = variants[1:] if parent_alias_case else (variants[1:2] if score < 500 else [])
+
+    for variant in extra_variants[:2]:
+        more_docs = await _keyword_documents(client, variant)
+        for d in more_docs:
             merged[d.get("id") or f"{d.get('x')}|{d.get('y')}|{d.get('place_name')}"] = d
-        retry_best, retry_score = _best_keyword_document(query, list(merged.values()))
-        if retry_score > score:
-            return retry_best, retry_score
+
+    if len(merged) > len(docs):
+        best, score = _best_keyword_document(query, list(merged.values()), variants)
 
     return best, score
 
@@ -200,13 +276,12 @@ async def geocode(query: str) -> dict:
     Address-like input uses the address API. Institution/place input uses Kakao
     keyword search and a conservative post-ranking tuned for public institutions.
     """
-    # v3 invalidates older 30-day cache entries produced by previous matchers.
-    cache_key = _hash_key(f"geocode-v3|{query}")
+    # v4 invalidates older 30-day cache entries produced by previous matchers.
+    cache_key = _hash_key(f"geocode-v4|{query}")
 
     async def factory() -> dict:
         async with httpx.AsyncClient(timeout=20) as client:
             if _looks_like_address(query):
-                # Exact analysis first prevents partial building-name matches.
                 r = await client.get(
                     ADDRESS_URL,
                     headers=_headers(),
@@ -215,8 +290,6 @@ async def geocode(query: str) -> dict:
                 r.raise_for_status()
                 docs = r.json().get("documents", [])
 
-                # Real addresses may contain harmless formatting differences;
-                # only address-like input is allowed to use similar fallback.
                 if not docs:
                     r = await client.get(
                         ADDRESS_URL,
