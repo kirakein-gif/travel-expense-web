@@ -103,7 +103,7 @@ function basePayload(){
     trip_type:$("trip_type").value,public_vehicle:$("public_vehicle").checked,provided_meals_count:Number($("provided_meals_count").value||0),
     training_stay_mode:$("training_stay_mode").value,training_round_trips:$("trip_type").value==="training"&&$("training_stay_mode").value==="custom"?Number($("training_round_trips").value||1):null,
     training_meal_claim_count:Number($("training_meal_claim_count").value||0),toll_fee:Number($("toll_fee").value||0),parking_fee:Number($("parking_fee").value||0),lodging_fee:Number($("lodging_fee").value||0),
-    affiliation:$("affiliation").value||null,position:$("position").value||null,traveler_name:$("traveler_name").value||null
+    affiliation:$("affiliation").value||null,position:$("position").value||null,traveler_name:$("traveler_name").value||null,passengers:$("passengers").value.trim()||null
   };
 }
 function placeText(name,address){if(!name&&!address)return"-"; if(!name||name===address)return address||name; return `${name} · ${address}`;}
@@ -186,6 +186,6 @@ $("evidenceButton").addEventListener('click',async()=>{
 
 $("pdfButton").addEventListener('click',async()=>{
   if(!lastPayload)return; $("pdfButton").disabled=true; const old=$("pdfButton").textContent; $("pdfButton").textContent='PDF 생성 중...';
-  try{const current=basePayload(); const pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,purpose:current.purpose,manual_energy_price:current.manual_energy_price}; const r=await fetch('/api/report.pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pdfPayload)}); if(!r.ok){const d=await r.json();throw new Error(d.detail||'PDF 생성 실패');} const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`여비산출내역_${pdfPayload.travel_date}.pdf`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+  try{const current=basePayload(); const pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,passengers:current.passengers,purpose:current.purpose,manual_energy_price:current.manual_energy_price}; const r=await fetch('/api/report.pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pdfPayload)}); if(!r.ok){const d=await r.json();throw new Error(d.detail||'PDF 생성 실패');} const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`여비산출내역_${pdfPayload.travel_date}.pdf`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   catch(e){$("globalStatus").textContent=e.message;} finally{$("pdfButton").textContent=old;$("pdfButton").disabled=false;}
 });
