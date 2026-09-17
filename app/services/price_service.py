@@ -17,12 +17,17 @@ def _find_sigungu_price(prices: dict[str, float], sigungu_name: str) -> float:
         if any(
             normalized == candidate
             or normalized.startswith(candidate)
+            or normalized.endswith(candidate)
             or candidate.startswith(normalized)
             for candidate in candidates
         ):
             return float(price)
 
-    raise RuntimeError(f"오피넷 캐시 가격표에서 {sigungu_name} 가격을 찾지 못했습니다.")
+    preview = ", ".join(list(prices.keys())[:12]) or "(비어 있음)"
+    raise RuntimeError(
+        f"오피넷 캐시 가격표에서 {sigungu_name} 가격을 찾지 못했습니다. "
+        f"추출된 지역: {preview}"
+    )
 
 
 async def get_energy_price(
@@ -32,7 +37,9 @@ async def get_energy_price(
     sigungu_name: str,
 ) -> dict:
     if vehicle_type in {"gasoline", "diesel", "lpg"}:
-        cache_key = f"{travel_date.isoformat()}|{province_name}|{vehicle_type}"
+        # v2 invalidates the older province-average table cache created before
+        # the OPINET 시군구 drill-down fix.
+        cache_key = f"v2|{travel_date.isoformat()}|{province_name}|{vehicle_type}"
 
         async def factory() -> dict:
             result = await query_opinet_region_prices(
