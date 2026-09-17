@@ -22,6 +22,16 @@ function currentVehicleSpec(){
   return VEHICLE_SPECS[$("vehicle_type").value];
 }
 
+function seoulToday(){
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const map=Object.fromEntries(parts.filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+function normSigungu(value){
+  return (value||'').trim().split(/\s+/)[0];
+}
+
 function days(){
   const s=new Date($("travel_date").value), e=new Date($("end_date").value);
   if(!$("travel_date").value||!$("end_date").value) return 1;
@@ -35,6 +45,25 @@ function setTab(n){
 }
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.go)));
+
+function clearPriceReview(){
+  lastPayload=null;
+  lastEvidencePayload=null;
+  $("resultNextButton").disabled=true;
+  $("pdfButton").disabled=true;
+  $("evidenceButton").disabled=true;
+  $("tab2check").textContent='';
+  ["review_formula","review_transport","review_daily","review_meal","review_total"].forEach(id=>{
+    if($(id)) $(id).textContent='-';
+  });
+}
+
+function clearDistanceReview(){
+  lastDistance=null;
+  $("distanceNextButton").disabled=true;
+  $("tab1check").textContent='';
+  clearPriceReview();
+}
 
 function updateVehicle(){
   const type=$("vehicle_type").value;
@@ -99,19 +128,6 @@ function updatePreview(){
     : "25,000원/일 · 제공식 1식당 1/3 감액";
 }
 
-[$("vehicle_type"),$("phev_energy_source")].forEach(el=>el.addEventListener('change',updateVehicle));
-[$("trip_type"),$("round_trip")].forEach(el=>el.addEventListener('change',()=>{updateTripType();updatePreview();}));
-[$("travel_date"),$("end_date")].forEach(el=>el.addEventListener('change',()=>{populateTrainingMealCounts();updateTripType();updatePreview();}));
-[$("training_stay_mode"),$("training_round_trips")].forEach(el=>el.addEventListener('change',updateTraining));
-$("training_meal_claim_count").addEventListener('change',updatePreview);
-
-const today=new Date().toISOString().slice(0,10);
-$("travel_date").value=today;
-$("end_date").value=today;
-populateTrainingMealCounts();
-updateVehicle();
-updateTripType();
-
 function basePayload(){
   const type=$("vehicle_type").value, spec=currentVehicleSpec();
   return {
@@ -145,12 +161,46 @@ function placeText(name,address){
   return `${name} · ${address}`;
 }
 
+function trainingSameWorkArea(payload){
+  if(payload.trip_type!=="training"||!lastDistance) return false;
+  const origin=normSigungu(lastDistance.origin_sigungu), dest=normSigungu(lastDistance.sigungu);
+  return Boolean(origin)&&origin===dest;
+}
+
+function requiresOpinetPrice(payload){
+  return Boolean(currentVehicleSpec().evidence)&&!payload.public_vehicle&&!trainingSameWorkArea(payload);
+}
+
+[$("vehicle_type"),$("phev_energy_source")].forEach(el=>el.addEventListener('change',()=>{clearPriceReview();updateVehicle();}));
+[$("trip_type"),$("round_trip")].forEach(el=>el.addEventListener('change',()=>{clearPriceReview();updateTripType();updatePreview();}));
+[$("travel_date"),$("end_date")].forEach(el=>el.addEventListener('change',()=>{clearPriceReview();populateTrainingMealCounts();updateTripType();updatePreview();}));
+[$("training_stay_mode"),$("training_round_trips")].forEach(el=>el.addEventListener('change',()=>{clearPriceReview();updateTraining();}));
+$("training_meal_claim_count").addEventListener('change',()=>{clearPriceReview();updatePreview();});
+["provided_meals_count","public_vehicle","toll_fee","parking_fee","lodging_fee"].forEach(id=>$(id).addEventListener('change',clearPriceReview));
+["origin","destination"].forEach(id=>$(id).addEventListener('input',clearDistanceReview));
+
+const today=seoulToday();
+$("travel_date").value=today;
+$("end_date").value=today;
+populateTrainingMealCounts();
+updateVehicle();
+updateTripType();
+
+$("distanceNextButton").addEventListener('click',()=>{
+  if(lastDistance) setTab(2);
+});
+
+$("resultNextButton").addEventListener('click',()=>{
+  if(lastPayload) setTab(3);
+});
+
 $("distanceButton").addEventListener('click',async()=>{
   if(!$("travel_date").value||!$("end_date").value||$("origin").value.trim().length<2||$("destination").value.trim().length<2){
     $("globalStatus").textContent="출장일과 출발지·출장지를 확인해주세요.";
     return;
   }
   $("distanceButton").disabled=true;
+  $("distanceNextButton").disabled=true;
   $("globalStatus").textContent="기관명·주소 확인 및 거리 계산 중...";
   try{
     const payload=basePayload();
@@ -164,8 +214,8 @@ $("distanceButton").addEventListener('click',async()=>{
     $("distance_source").textContent=data.distance_source+(data.distance_cache_hit?' · 캐시':'');
     $("destination_code").textContent=data.destination_support_office||data.destination_code||data.sigungu||'-';
     $("tab1check").textContent='✓';
-    $("globalStatus").textContent="거리 확인 완료 · 여비 상세를 입력해주세요.";
-    setTab(2);
+    $("distanceNextButton").disabled=false;
+    $("globalStatus").textContent="거리 확인 완료 · 오른쪽 결과를 확인한 뒤 다음 단계로 이동하세요.";
   }catch(e){
     $("globalStatus").textContent=e.message;
   }finally{
@@ -179,10 +229,16 @@ $("calculateButton").addEventListener('click',async()=>{
     setTab(1);
     return;
   }
+  const payload=basePayload();
+  if(requiresOpinetPrice(payload)&&payload.travel_date>=seoulToday()){
+    $("globalStatus").textContent="오피넷 지역별 일평균 유가는 당일 자료가 제공되지 않습니다. 출장 시작일을 전일 또는 이전 날짜로 선택해주세요.";
+    return;
+  }
+
   $("calculateButton").disabled=true;
+  $("resultNextButton").disabled=true;
   $("globalStatus").textContent="운임·일비·식비 계산 중...";
   try{
-    const payload=basePayload();
     const pp={
       travel_date:payload.travel_date,
       end_date:payload.end_date,
@@ -216,8 +272,8 @@ $("calculateButton").addEventListener('click',async()=>{
     $("final_round_trips").textContent=data.round_trip_count===0.5?'편도':`${fmt(data.round_trip_count)}회`;
     $("final_transport_distance").textContent=`${fmt(data.transport_distance_km)} km`;
     $("vehicle_spec").textContent=`${data.vehicle_label||currentVehicleSpec().label} · ${data.effective_efficiency||currentVehicleSpec().efficiency} ${data.efficiency_unit||currentVehicleSpec().unit}`;
-    $("fuel_price_date").textContent=data.fuel_price_date?`${data.fuel_price_date} · 출장 첫째 날`:'-';
-    $("price").textContent=data.energy_price==null?'연결 예정':`${fmt(data.energy_price)} 원`;
+    $("fuel_price_date").textContent=data.fuel_price_date?`${data.fuel_price_date} · 출장 첫째 날`:'해당 없음';
+    $("price").textContent=data.energy_price==null?'해당 없음 / 연결 예정':`${fmt(data.energy_price)} 원`;
     $("formula").textContent=data.calculation_formula||'-';
     $("amount").textContent=data.estimated_transport_cost==null?'단가 연결 후 계산':`${fmt(data.estimated_transport_cost)} 원`;
     $("daily_allowance").textContent=`${fmt(data.daily_allowance)} 원`;
@@ -230,6 +286,12 @@ $("calculateButton").addEventListener('click',async()=>{
     $("total_expense").textContent=data.total_expense==null?'자동차 단가 연결 후 확정':`${fmt(data.total_expense)} 원`;
     $("source").textContent=(data.price_source||'-')+(data.price_cache_hit?' · 캐시':'');
 
+    $("review_formula").textContent=data.calculation_formula||'-';
+    $("review_transport").textContent=data.estimated_transport_cost==null?'단가 연결 후 계산':`${fmt(data.estimated_transport_cost)} 원`;
+    $("review_daily").textContent=`${fmt(data.daily_allowance)} 원`;
+    $("review_meal").textContent=`${fmt(data.meal_allowance)} 원`;
+    $("review_total").textContent=data.total_expense==null?'단가 연결 후 확정':`${fmt(data.total_expense)} 원`;
+
     const spec=currentVehicleSpec();
     const canEvidence=spec.evidence&&data.energy_price!=null&&!payload.public_vehicle;
     if(canEvidence){
@@ -237,13 +299,14 @@ $("calculateButton").addEventListener('click',async()=>{
       $("evidenceButton").disabled=false;
       $("evidence").textContent='API 가격 확인 · 증빙 생성 대기';
     }else{
+      lastEvidencePayload=null;
       $("evidenceButton").disabled=true;
       $("evidence").textContent=data.evidence_status;
     }
     $("pdfButton").disabled=false;
+    $("resultNextButton").disabled=false;
     $("tab2check").textContent='✓';
-    $("globalStatus").textContent="여비 계산 완료";
-    setTab(3);
+    $("globalStatus").textContent="여비 계산 완료 · 오른쪽 계산값을 확인한 뒤 결과·증빙 단계로 이동하세요.";
   }catch(e){
     $("globalStatus").textContent=e.message;
   }finally{
@@ -282,11 +345,13 @@ $("pdfButton").addEventListener('click',async()=>{
   const old=$("pdfButton").textContent;
   $("pdfButton").textContent='PDF 생성 중...';
   try{
-    const r=await fetch('/api/report.pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(lastPayload)});
+    const current=basePayload();
+    const pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,purpose:current.purpose};
+    const r=await fetch('/api/report.pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pdfPayload)});
     if(!r.ok){const d=await r.json();throw new Error(d.detail||'PDF 생성 실패');}
     const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');
     a.href=url;
-    a.download=`여비산출내역_${lastPayload.travel_date}.pdf`;
+    a.download=`여비산출내역_${pdfPayload.travel_date}.pdf`;
     a.click();
     setTimeout(()=>URL.revokeObjectURL(url),1000);
   }catch(e){
