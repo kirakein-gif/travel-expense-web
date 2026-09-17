@@ -47,5 +47,13 @@ class PriceResponse(BaseModel):
     evidence_status: str = "pending"
 
 
+class EvidenceRequest(BaseModel):
+    travel_date: date
+    vehicle_type: VehicleType
+    province: str = Field(min_length=1)
+    sigungu: str = Field(min_length=1)
+    expected_price: float = Field(gt=0)
+
+
 class EstimateResponse(DistanceResponse, PriceResponse):
     pass

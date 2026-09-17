@@ -14,7 +14,7 @@
       <h1>여비정산 자동화</h1>
       <p class="sub">기관명 또는 주소를 입력하면 장소 확인 → 거리 → 적용단가 → 자동차운임 순서로 계산합니다.</p>
     </div>
-    <div class="badge">v0.4 PLACE SEARCH</div>
+    <div class="badge">v0.5 EVIDENCE</div>
   </section>
 
   <section class="grid">
@@ -38,6 +38,7 @@
       </label>
       <label class="check"><input id="round_trip" type="checkbox" checked>왕복으로 계산</label>
       <button id="calculateButton" type="submit">자동 계산</button>
+      <button id="evidenceButton" type="button" disabled style="margin-top:10px;background:#0f766e">오피넷 증빙 생성</button>
       <button id="pdfButton" type="button" disabled style="margin-top:10px;background:#475569">PDF 산출내역</button>
     </form>
 
@@ -62,9 +63,11 @@
 <script>
 const form = document.getElementById("travelForm");
 const calculateButton = document.getElementById("calculateButton");
+const evidenceButton = document.getElementById("evidenceButton");
 const pdfButton = document.getElementById("pdfButton");
 const fmt = n => n == null ? "-" : Number(n).toLocaleString("ko-KR");
 let lastPayload = null;
+let lastEvidencePayload = null;
 
 function payloadFromForm() {
   return {
@@ -99,8 +102,10 @@ form.addEventListener("submit", async e => {
   e.preventDefault();
   resetResult();
   calculateButton.disabled = true;
+  evidenceButton.disabled = true;
   pdfButton.disabled = true;
   lastPayload = null;
+  lastEvidencePayload = null;
   const payload = payloadFromForm();
 
   try {
@@ -129,8 +134,8 @@ form.addEventListener("submit", async e => {
     document.getElementById("status").textContent = "거리 계산 완료 · 2/2 유가 조회 중...";
     document.getElementById("price").textContent = "조회 중...";
     document.getElementById("amount").textContent = "단가 대기 중...";
-    document.getElementById("source").textContent = "오피넷 조회 중...";
-    document.getElementById("evidence").textContent = "준비 중...";
+    document.getElementById("source").textContent = "오피넷 API 조회 중...";
+    document.getElementById("evidence").textContent = "API 가격 확인 중...";
 
     const pricePayload = {
       travel_date: payload.travel_date,
@@ -154,9 +159,23 @@ form.addEventListener("submit", async e => {
     document.getElementById("price").textContent = priceData.energy_price == null ? "연결 예정" : fmt(priceData.energy_price) + " 원";
     document.getElementById("amount").textContent = priceData.estimated_transport_cost == null ? "단가 연결 후 계산" : fmt(priceData.estimated_transport_cost) + " 원";
     document.getElementById("source").textContent = (priceData.price_source || "-") + (priceData.price_cache_hit ? " · 캐시" : "");
-    document.getElementById("evidence").textContent = priceData.evidence_status;
-    document.getElementById("status").textContent = "계산 완료";
 
+    const canCreateEvidence = ["gasoline", "diesel", "lpg"].includes(payload.vehicle_type) && priceData.energy_price != null;
+    if (canCreateEvidence) {
+      lastEvidencePayload = {
+        travel_date: payload.travel_date,
+        vehicle_type: payload.vehicle_type,
+        province: distanceData.province,
+        sigungu: distanceData.sigungu,
+        expected_price: priceData.energy_price
+      };
+      evidenceButton.disabled = false;
+      document.getElementById("evidence").textContent = "API 가격 확인 · 증빙 생성 대기";
+    } else {
+      document.getElementById("evidence").textContent = priceData.evidence_status;
+    }
+
+    document.getElementById("status").textContent = "계산 완료";
     lastPayload = payload;
     pdfButton.disabled = false;
   } catch (err) {
@@ -172,6 +191,45 @@ form.addEventListener("submit", async e => {
     }
   } finally {
     calculateButton.disabled = false;
+  }
+});
+
+evidenceButton.addEventListener("click", async () => {
+  if (!lastEvidencePayload) return;
+  evidenceButton.disabled = true;
+  const oldText = evidenceButton.textContent;
+  evidenceButton.textContent = "증빙 생성 중...";
+  document.getElementById("status").textContent = "오피넷 공식 화면을 열어 증빙을 생성하고 있습니다...";
+  document.getElementById("evidence").textContent = "브라우저 증빙 생성 중...";
+
+  try {
+    const r = await fetch("/api/opinet-evidence.png", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(lastEvidencePayload)
+    });
+
+    if (!r.ok) {
+      const data = await r.json();
+      throw new Error(data.detail || "오피넷 증빙 생성 실패");
+    }
+
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `오피넷증빙_${lastEvidencePayload.travel_date}_${lastEvidencePayload.sigungu}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    document.getElementById("evidence").textContent = "verified_web_capture";
+    document.getElementById("status").textContent = "증빙 생성 완료 · API 가격과 오피넷 화면 가격 일치 확인";
+  } catch (err) {
+    document.getElementById("evidence").textContent = "evidence_failed";
+    document.getElementById("status").textContent = "증빙 생성 실패 · " + err.message;
+  } finally {
+    evidenceButton.textContent = oldText;
+    evidenceButton.disabled = false;
   }
 });
 
