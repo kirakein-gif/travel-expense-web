@@ -73,6 +73,7 @@ async def generate_estimate_pdf(
     origin = _place(result.resolved_origin_name, result.resolved_origin_address, req.origin)
     destination = _place(result.resolved_destination_name, result.resolved_destination_address, req.destination)
     applicant = " / ".join(v for v in [req.affiliation, req.position, req.traveler_name] if v) or "-"
+    passengers = req.passengers or "-"
     price_date = result.fuel_price_date.isoformat() if result.fuel_price_date else "-"
     round_trips = "편도" if result.round_trip_count == 0.5 else f"{result.round_trip_count:g}회"
     vehicle = result.vehicle_label or req.vehicle_type
@@ -108,6 +109,7 @@ async def generate_estimate_pdf(
   th, td {{ border: 1px solid #64748b; padding: 2.1mm 2.4mm; vertical-align: middle; line-height: 1.45; }}
   th {{ background: #f1f5f9; font-weight: 700; text-align: center; }}
   .label {{ width: 18%; }}
+  .passengers {{ white-space: pre-wrap; word-break: break-word; }}
   .money {{ text-align: right; font-weight: 700; }}
   .total {{ font-size: 15px; font-weight: 800; text-align: right; background: #f8fafc; }}
   .section {{ margin-top: 4mm; }}
@@ -130,6 +132,7 @@ async def generate_estimate_pdf(
 
     <table>
       <tr><th class="label">신청인</th><td colspan="3">{_e(applicant)}</td></tr>
+      <tr><th>동승자</th><td colspan="3" class="passengers">{_e(passengers)}</td></tr>
       <tr><th>출장기간</th><td>{_e(_period(req))}</td><th>출장유형</th><td>{_e(_trip_type(req))}</td></tr>
       <tr><th>출장목적</th><td colspan="3">{_e(req.purpose)}</td></tr>
       <tr><th>출발지</th><td colspan="3">{_e(origin)}</td></tr>
