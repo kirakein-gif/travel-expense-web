@@ -12,204 +12,213 @@
     <div>
       <p class="eyebrow">TRAVEL EXPENSE AUTOMATION</p>
       <h1>여비정산 자동화</h1>
-      <p class="sub">거리와 여비 규칙을 단계별로 확인한 뒤 증빙과 PDF를 만듭니다.</p>
+      <p class="sub">출장신청서 PDF를 불러오거나 직접 입력한 뒤 거리와 여비를 확인합니다.</p>
     </div>
-    <div class="badge">v1.3 READABLE PDF</div>
+    <div class="badge">v1.4 SIDEBAR IMPORT</div>
   </section>
 
-  <nav class="tabs" aria-label="여비정산 단계">
-    <button class="tab active" data-tab="1"><span>1</span>출장·거리 <b id="tab1check"></b></button>
-    <button class="tab" data-tab="2"><span>2</span>여비 상세 <b id="tab2check"></b></button>
-    <button class="tab" data-tab="3"><span>3</span>결과·증빙</button>
-  </nav>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <section class="side-card">
+        <div class="side-title">출장신청서 불러오기</div>
+        <label id="dropZone" class="drop-zone" for="pdfFile">
+          <input id="pdfFile" type="file" accept="application/pdf,.pdf" hidden>
+          <strong>PDF를 여기에 놓거나 클릭</strong>
+          <span>리스트용 · 결재용 자동 판별</span>
+        </label>
+        <div id="fileStatus" class="side-note">직접 입력만 사용할 수도 있습니다.</div>
 
-  <div id="globalStatus" class="status top-status">출장 정보를 입력해주세요.</div>
-
-  <section id="tab1" class="tab-panel active">
-    <div class="grid">
-      <section class="card">
-        <h2>출장·거리</h2>
-        <div class="two">
-          <label>출장 시작일<input id="travel_date" type="date" required></label>
-          <label>출장 종료일<input id="end_date" type="date" required></label>
-        </div>
-        <label>출발지<input id="origin" type="text" placeholder="예: 천안버들유치원" required></label>
-        <label>출장지<input id="destination" type="text" placeholder="예: 충청남도교육청" required></label>
-        <label>출장 목적<input id="purpose" type="text" placeholder="예: 협의회 참석"></label>
-        <label>출장 유형
-          <select id="trip_type">
-            <option value="normal">일반출장</option>
-            <option value="training">교육훈련</option>
-          </select>
-        </label>
-
-        <div class="section-label">차량</div>
-        <label>차량 종류
-          <select id="vehicle_type">
-            <option value="gasoline">휘발유</option>
-            <option value="diesel">경유</option>
-            <option value="lpg">LPG</option>
-            <option value="hybrid">하이브리드</option>
-            <option value="phev">플러그인하이브리드</option>
-            <option value="electric">전기</option>
-            <option value="hydrogen">수소</option>
-          </select>
-        </label>
-        <label id="phevEnergyWrap" class="hidden">플러그인하이브리드 사용 에너지원
-          <select id="phev_energy_source">
-            <option value="gasoline">휘발유 사용</option>
-            <option value="electric">전기충전 사용</option>
-          </select>
-        </label>
-        <label>적용 연비 / 전비
-          <input id="efficiency" type="text" readonly>
-          <span class="help">제공해주신 승용차 유종별 연비(전비) 기준을 자동 적용합니다.</span>
-        </label>
-        <label id="roundTripWrap" class="check"><input id="round_trip" type="checkbox" checked>왕복으로 계산</label>
-        <div class="button-row review-actions">
-          <button id="distanceButton" type="button">거리 확인</button>
-          <button id="distanceNextButton" type="button" disabled>다음 : 여비 상세</button>
+        <div id="importChooser" class="hidden">
+          <label>출장 선택
+            <select id="tripSelect"></select>
+          </label>
+          <label>신청인 선택
+            <select id="applicantSelect"></select>
+          </label>
+          <div id="passengerCandidates" class="candidate-box hidden">
+            <div class="candidate-title">동승 후보</div>
+            <div class="side-note">실제 같은 차량을 이용한 사람만 체크하세요.</div>
+            <div id="passengerChecks"></div>
+          </div>
         </div>
       </section>
 
-      <section class="card result compact-result">
-        <h2>거리 확인</h2>
-        <div class="hint">기관명은 카카오 장소검색으로 주소·좌표를 확인하고, 충남 내부는 고정거리표를 우선 적용합니다. 확인 후 직접 다음 단계로 이동합니다.</div>
-        <dl>
-          <div><dt>출발지 확인</dt><dd id="resolved_origin">-</dd></div>
-          <div><dt>출장지 확인</dt><dd id="resolved_destination">-</dd></div>
-          <div><dt>편도 기준거리</dt><dd id="one_way_distance">-</dd></div>
-          <div><dt>거리 기준</dt><dd id="distance_source">-</dd></div>
-          <div><dt>기준 목적지</dt><dd id="destination_code">-</dd></div>
-        </dl>
-      </section>
-    </div>
-  </section>
-
-  <section id="tab2" class="tab-panel">
-    <div class="grid">
-      <section class="card">
-        <h2>여비 상세</h2>
-        <div id="normalOptions">
-          <div class="section-label">일반출장</div>
-          <label>제공 식사 수
-            <select id="provided_meals_count"></select>
-            <span class="help">1식 제공 시 1일 식비의 1/3을 감액합니다. 출장일수에 따라 선택 가능한 횟수가 자동으로 늘어납니다.</span>
-          </label>
-        </div>
-
-        <div id="trainingOptions" class="hidden">
-          <div class="section-label">교육훈련</div>
-          <label>숙박 방식
-            <select id="training_stay_mode">
-              <option value="nonresidential">전일 비숙박 · 매일 왕복</option>
-              <option value="residential">전일 숙박 · 첫날 출발/마지막날 귀가</option>
-              <option value="custom">혼합 · 왕복 횟수 직접 지정</option>
-            </select>
-          </label>
-          <label id="customRoundTripsWrap" class="hidden">자동차 왕복 횟수
-            <input id="training_round_trips" type="number" min="1" step="1" value="1">
-            <span class="help">예: 3일 교육 중 일부만 숙박하여 총 2번 왕복하면 2를 입력합니다.</span>
-          </label>
-          <div id="trainingTripHint" class="inline-note"></div>
-          <label>교육훈련기관 식비 청구 횟수
-            <select id="training_meal_claim_count"></select>
-            <span class="help">청구된 식사 1식마다 1일 식비의 1/3을 감액합니다.</span>
-          </label>
-        </div>
-
-        <label class="check"><input id="public_vehicle" type="checkbox">공용차량 이용</label>
-        <span class="help standalone">공용차량 사용 시 일비는 50% 감액하고 자가용 자동차운임은 지급하지 않는 것으로 계산합니다.</span>
-
-        <div id="manualPriceWrap" class="hidden">
-          <div class="section-label">당일 출장 유가</div>
-          <label>적용 유가 직접 입력 (원/L)
-            <input id="manual_energy_price" type="number" min="0.01" step="0.01" placeholder="예: 1860.58">
-            <span class="help">오피넷 당일 지역별 일평균 유가는 아직 제공되지 않으므로 당일 출장신청은 적용 유가를 직접 입력합니다. PDF에는 수동입력으로 표시됩니다.</span>
-          </label>
-        </div>
-
-        <div class="section-label">직접 입력 비용</div>
-        <div class="two">
-          <label>통행료<input id="toll_fee" type="number" min="0" step="1" value="0"></label>
-          <label>주차료<input id="parking_fee" type="number" min="0" step="1" value="0"></label>
-        </div>
-        <label>숙박비<input id="lodging_fee" type="number" min="0" step="1" value="0"></label>
-
-        <div class="section-label">신청인 정보 · PDF 작성용</div>
-        <div class="two">
-          <label>소속<input id="affiliation" type="text" placeholder="예: 천안버들유치원"></label>
-          <label>직급(직위)<input id="position" type="text" placeholder="예: 주무관"></label>
-        </div>
-        <label>신청인 성명<input id="traveler_name" type="text" placeholder="예: 홍길동"></label>
-        <label>동승자
-          <textarea id="passengers" rows="3" placeholder="예: 김영희, 박철수, 이민수"></textarea>
-          <span class="help">동승자가 여러 명이면 쉼표(,) 또는 줄바꿈으로 한 번에 입력하세요. PDF에서는 신청인 서명 아래에 동승자별 서명란이 표시됩니다.</span>
-        </label>
-
-        <div class="button-row review-actions">
-          <button id="calculateButton" type="button">여비 계산</button>
-          <button id="resultNextButton" type="button" disabled>다음 : 결과·증빙</button>
-        </div>
-        <button class="secondary full" data-go="1" type="button">이전 : 출장·거리</button>
+      <section class="side-card">
+        <div class="side-title">작성 단계</div>
+        <button class="side-step active" data-tab="1"><span>1</span><div><b>출장·거리</b><small>출장정보와 이동거리 확인</small></div><em id="tab1check"></em></button>
+        <button class="side-step" data-tab="2"><span>2</span><div><b>여비 상세</b><small>일비·식비·기타비용 계산</small></div><em id="tab2check"></em></button>
       </section>
 
-      <section class="card result compact-result">
-        <h2>계산 결과 확인</h2>
-        <div class="hint">여비 계산 후 이 자리에서 값을 확인한 다음 결과·증빙 단계로 이동합니다.</div>
-        <dl>
-          <div><dt>출장일수</dt><dd id="preview_days">-</dd></div>
-          <div><dt>출장유형</dt><dd id="preview_type">-</dd></div>
-          <div><dt>예상 왕복횟수</dt><dd id="preview_round_trips">-</dd></div>
-          <div><dt>차량·연비</dt><dd id="preview_vehicle">-</dd></div>
-          <div><dt>유가 기준</dt><dd id="preview_fuel_date">첫째 날</dd></div>
-          <div><dt>자동차운임 산식</dt><dd id="review_formula" class="formula">-</dd></div>
-          <div><dt>자동차운임</dt><dd id="review_transport">-</dd></div>
-          <div><dt>일비</dt><dd id="review_daily">-</dd></div>
-          <div><dt>식비</dt><dd id="review_meal">-</dd></div>
-          <div><dt>합계</dt><dd id="review_total" class="total">-</dd></div>
-        </dl>
-      </section>
-    </div>
-  </section>
-
-  <section id="tab3" class="tab-panel">
-    <div class="grid">
-      <section class="card result">
-        <h2>최종 산출 목록</h2>
-        <dl>
-          <div><dt>출발지</dt><dd id="final_origin">-</dd></div>
-          <div><dt>출장지</dt><dd id="final_destination">-</dd></div>
-          <div><dt>편도 기준거리</dt><dd id="final_one_way">-</dd></div>
-          <div><dt>왕복 횟수</dt><dd id="final_round_trips">-</dd></div>
-          <div><dt>자동차운임 적용거리</dt><dd id="final_transport_distance">-</dd></div>
-          <div><dt>차량·연비</dt><dd id="vehicle_spec">-</dd></div>
-          <div><dt>유가 기준일</dt><dd id="fuel_price_date">-</dd></div>
-          <div><dt>적용단가</dt><dd id="price">-</dd></div>
-          <div><dt>자동차운임 산식</dt><dd id="formula" class="formula">-</dd></div>
-          <div><dt>자동차운임</dt><dd id="amount">-</dd></div>
-          <div><dt>일비</dt><dd id="daily_allowance">-</dd></div>
-          <div><dt>일비 근거</dt><dd id="daily_note" class="note-value">-</dd></div>
-          <div><dt>식비</dt><dd id="meal_allowance">-</dd></div>
-          <div><dt>식비 근거</dt><dd id="meal_note" class="note-value">-</dd></div>
-          <div><dt>통행료</dt><dd id="toll_result">-</dd></div>
-          <div><dt>주차료</dt><dd id="parking_result">-</dd></div>
-          <div><dt>숙박비</dt><dd id="lodging_result">-</dd></div>
-          <div><dt>합계</dt><dd id="total_expense" class="total">-</dd></div>
-          <div><dt>가격출처</dt><dd id="source">-</dd></div>
-          <div><dt>증빙상태</dt><dd id="evidence">-</dd></div>
-        </dl>
-      </section>
-
-      <section class="card">
-        <h2>증빙·출력</h2>
-        <div class="hint">PDF는 양면 출력용 2페이지로 생성됩니다. 과거 유가는 오피넷 증빙을 첨부하고, 당일 수동 유가는 수동입력 사실을 명시합니다.</div>
-        <button id="evidenceButton" type="button" disabled class="teal">오피넷 증빙만 생성</button>
+      <section id="outputActions" class="side-card output-card">
+        <div class="side-title">증빙·출력</div>
+        <div class="side-note">여비 계산이 완료되면 아래 버튼이 활성화됩니다.</div>
+        <button id="evidenceButton" type="button" disabled class="teal">오피넷 증빙 생성</button>
         <button id="pdfButton" type="button" disabled class="dark">2페이지 여비신청서 PDF</button>
-        <button class="secondary full" data-go="2" type="button">여비 상세로 돌아가기</button>
       </section>
-    </div>
-  </section>
+    </aside>
+
+    <section class="workspace">
+      <div id="globalStatus" class="status top-status">출장 정보를 입력해주세요.</div>
+
+      <div class="work-grid">
+        <div class="input-column">
+          <section id="tab1" class="tab-panel active">
+            <section class="card">
+              <h2>1. 출장·거리</h2>
+              <div class="two">
+                <label>출장 시작일<input id="travel_date" type="date" required></label>
+                <label>출장 종료일<input id="end_date" type="date" required></label>
+              </div>
+              <label>출발지<input id="origin" type="text" placeholder="예: 천안버들유치원" required></label>
+              <label>출장지<input id="destination" type="text" placeholder="예: 충청남도교육청" required></label>
+              <label>출장 목적<input id="purpose" type="text" placeholder="예: 협의회 참석"></label>
+              <label>출장 유형
+                <select id="trip_type">
+                  <option value="normal">일반출장</option>
+                  <option value="training">교육훈련</option>
+                </select>
+              </label>
+
+              <div class="section-label">차량</div>
+              <label>차량 종류
+                <select id="vehicle_type">
+                  <option value="gasoline">휘발유</option>
+                  <option value="diesel">경유</option>
+                  <option value="lpg">LPG</option>
+                  <option value="hybrid">하이브리드</option>
+                  <option value="phev">플러그인하이브리드</option>
+                  <option value="electric">전기</option>
+                  <option value="hydrogen">수소</option>
+                </select>
+              </label>
+              <label id="phevEnergyWrap" class="hidden">플러그인하이브리드 사용 에너지원
+                <select id="phev_energy_source">
+                  <option value="gasoline">휘발유 사용</option>
+                  <option value="electric">전기충전 사용</option>
+                </select>
+              </label>
+              <label>적용 연비 / 전비
+                <input id="efficiency" type="text" readonly>
+                <span class="help">승용차 유종별 기준 연비(전비)를 자동 적용합니다.</span>
+              </label>
+              <label id="roundTripWrap" class="check"><input id="round_trip" type="checkbox" checked>왕복으로 계산</label>
+
+              <div class="button-row">
+                <button id="distanceButton" type="button">거리 확인</button>
+                <button id="distanceNextButton" type="button" disabled class="secondary">다음 : 여비 상세</button>
+              </div>
+            </section>
+          </section>
+
+          <section id="tab2" class="tab-panel">
+            <section class="card">
+              <h2>2. 여비 상세</h2>
+              <div id="normalOptions">
+                <div class="section-label">일반출장</div>
+                <label>제공 식사 수
+                  <select id="provided_meals_count"></select>
+                  <span class="help">1식 제공 시 1일 식비의 1/3을 감액합니다.</span>
+                </label>
+              </div>
+
+              <div id="trainingOptions" class="hidden">
+                <div class="section-label">교육훈련</div>
+                <label>숙박 방식
+                  <select id="training_stay_mode">
+                    <option value="nonresidential">전일 비숙박 · 매일 왕복</option>
+                    <option value="residential">전일 숙박 · 첫날 출발/마지막날 귀가</option>
+                    <option value="custom">혼합 · 왕복 횟수 직접 지정</option>
+                  </select>
+                </label>
+                <label id="customRoundTripsWrap" class="hidden">자동차 왕복 횟수
+                  <input id="training_round_trips" type="number" min="1" step="1" value="1">
+                  <span class="help">예: 3일 교육 중 총 2번 왕복하면 2를 입력합니다.</span>
+                </label>
+                <div id="trainingTripHint" class="inline-note"></div>
+                <label>교육훈련기관 식비 청구 횟수
+                  <select id="training_meal_claim_count"></select>
+                  <span class="help">청구된 식사 1식마다 1일 식비의 1/3을 감액합니다.</span>
+                </label>
+              </div>
+
+              <label class="check"><input id="public_vehicle" type="checkbox">공용차량 이용</label>
+              <span class="help standalone">공용차량 사용 시 일비는 50% 감액하고 자가용 자동차운임은 지급하지 않는 것으로 계산합니다.</span>
+
+              <div id="manualPriceWrap" class="hidden">
+                <div class="section-label">당일 출장 유가</div>
+                <label>적용 유가 직접 입력 (원/L)
+                  <input id="manual_energy_price" type="number" min="0.01" step="0.01" placeholder="예: 1860.58">
+                  <span class="help">오피넷 당일 지역별 일평균 유가는 제공되지 않으므로 직접 입력합니다.</span>
+                </label>
+              </div>
+
+              <div class="section-label">직접 입력 비용</div>
+              <div class="two">
+                <label>통행료<input id="toll_fee" type="number" min="0" step="1" value="0"></label>
+                <label>주차료<input id="parking_fee" type="number" min="0" step="1" value="0"></label>
+              </div>
+              <label>숙박비<input id="lodging_fee" type="number" min="0" step="1" value="0"></label>
+
+              <div class="section-label">신청인 정보 · PDF 작성용</div>
+              <div class="two">
+                <label>소속<input id="affiliation" type="text" placeholder="예: 천안버들유치원"></label>
+                <label>직급(직위)<input id="position" type="text" placeholder="예: 주무관"></label>
+              </div>
+              <label>신청인 성명<input id="traveler_name" type="text" placeholder="예: 홍길동"></label>
+              <label>동승자
+                <textarea id="passengers" rows="3" placeholder="예: 김영희, 박철수, 이민수"></textarea>
+                <span class="help">파일에서 같은 출장으로 확인된 사람은 왼쪽의 동승 후보에서 선택할 수 있습니다.</span>
+              </label>
+
+              <div class="button-row">
+                <button id="calculateButton" type="button">여비 계산</button>
+                <button class="secondary" data-go="1" type="button">이전 : 출장·거리</button>
+              </div>
+            </section>
+          </section>
+        </div>
+
+        <aside class="result-column">
+          <section class="card result unified-result">
+            <div class="result-head">
+              <div>
+                <p class="result-kicker">LIVE RESULT</p>
+                <h2>통합 산출 결과</h2>
+              </div>
+              <span id="resultState" class="result-state">입력 대기</span>
+            </div>
+            <div class="hint">거리 확인 후 주소·거리 결과가 먼저 채워지고, 여비 계산 후 최종 금액까지 같은 화면에 이어서 표시됩니다.</div>
+            <dl>
+              <div><dt>출발지 확인</dt><dd id="resolved_origin">-</dd></div>
+              <div><dt>출장지 확인</dt><dd id="resolved_destination">-</dd></div>
+              <div><dt>편도 기준거리</dt><dd id="one_way_distance">-</dd></div>
+              <div><dt>거리 기준</dt><dd id="distance_source">-</dd></div>
+              <div><dt>기준 목적지</dt><dd id="destination_code">-</dd></div>
+              <div><dt>출장일수</dt><dd id="preview_days">-</dd></div>
+              <div><dt>출장유형</dt><dd id="preview_type">-</dd></div>
+              <div><dt>왕복 횟수</dt><dd id="final_round_trips">-</dd></div>
+              <div><dt>적용거리</dt><dd id="final_transport_distance">-</dd></div>
+              <div><dt>차량·연비</dt><dd id="vehicle_spec">-</dd></div>
+              <div><dt>유가 기준일</dt><dd id="fuel_price_date">-</dd></div>
+              <div><dt>적용단가</dt><dd id="price">-</dd></div>
+              <div><dt>자동차운임 산식</dt><dd id="formula" class="formula">-</dd></div>
+              <div><dt>자동차운임</dt><dd id="amount">-</dd></div>
+              <div><dt>일비</dt><dd id="daily_allowance">-</dd></div>
+              <div><dt>일비 근거</dt><dd id="daily_note" class="note-value">-</dd></div>
+              <div><dt>식비</dt><dd id="meal_allowance">-</dd></div>
+              <div><dt>식비 근거</dt><dd id="meal_note" class="note-value">-</dd></div>
+              <div><dt>통행료</dt><dd id="toll_result">-</dd></div>
+              <div><dt>주차료</dt><dd id="parking_result">-</dd></div>
+              <div><dt>숙박비</dt><dd id="lodging_result">-</dd></div>
+              <div><dt>가격출처</dt><dd id="source">-</dd></div>
+              <div><dt>증빙상태</dt><dd id="evidence">-</dd></div>
+              <div class="grand-total"><dt>합계</dt><dd id="total_expense" class="total">-</dd></div>
+            </dl>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </div>
 </main>
 <script src="/static/app.js"></script>
 </body>
