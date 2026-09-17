@@ -6,6 +6,7 @@ from app.browser.opinet_browser import normalize_sigungu, query_opinet_region_pr
 from app.config import OPINET_API_KEY
 from app.services.cache_service import cache
 from app.services.opinet_api_service import get_historical_area_price
+from app.services.travel_policy import get_vehicle_spec
 
 
 def _find_sigungu_price(prices: dict[str, float], sigungu_name: str) -> float:
@@ -34,17 +35,17 @@ def _find_sigungu_price(prices: dict[str, float], sigungu_name: str) -> float:
 
 async def _get_browser_price(
     travel_date: date,
-    vehicle_type: str,
+    lookup_vehicle_type: str,
     province_name: str,
     sigungu_name: str,
 ) -> dict:
-    cache_key = f"v3|{travel_date.isoformat()}|{province_name}|{vehicle_type}"
+    cache_key = f"v4|{travel_date.isoformat()}|{province_name}|{lookup_vehicle_type}"
 
     async def factory() -> dict:
         result = await query_opinet_region_prices(
             travel_date=travel_date,
             province_name=province_name,
-            vehicle_type=vehicle_type,
+            vehicle_type=lookup_vehicle_type,
         )
         return {
             "prices": result.prices,
@@ -77,18 +78,19 @@ async def get_energy_price(
     vehicle_type: str,
     province_name: str,
     sigungu_name: str,
+    phev_energy_source: str | None = None,
 ) -> dict:
-    if vehicle_type in {"gasoline", "diesel", "lpg"}:
-        # 운영환경에서는 API가 가격 계산의 주 경로다. API가 실패했을 때
-        # 사용자를 20~30초 더 기다리게 하지 않고 즉시 원인을 보여준다.
-        # 웹 브라우저 조회/캡처는 별도의 증빙 단계로 분리한다.
+    spec = get_vehicle_spec(vehicle_type, phev_energy_source)
+    lookup_vehicle_type = spec.price_vehicle_type
+
+    if lookup_vehicle_type in {"gasoline", "diesel", "lpg"}:
         if OPINET_API_KEY:
             try:
                 api_result = await get_historical_area_price(
                     travel_date=travel_date,
                     province_name=province_name,
                     sigungu_name=sigungu_name,
-                    vehicle_type=vehicle_type,
+                    vehicle_type=lookup_vehicle_type,
                 )
             except Exception as exc:
                 raise RuntimeError(f"오피넷 API 조회 실패: {exc}") from exc
@@ -102,15 +104,14 @@ async def get_energy_price(
                 "cache_hit": bool(api_result.get("cache_hit")),
             }
 
-        # API 키가 없는 로컬 개발환경에서만 웹 조회를 임시 fallback으로 사용한다.
         return await _get_browser_price(
             travel_date,
-            vehicle_type,
+            lookup_vehicle_type,
             province_name,
             sigungu_name,
         )
 
-    if vehicle_type == "electric":
+    if lookup_vehicle_type == "electric":
         return {
             "price": None,
             "source": "환경부 무공해차 통합누리집 급속충전요금 (연결 예정)",
@@ -120,7 +121,7 @@ async def get_energy_price(
             "cache_hit": False,
         }
 
-    if vehicle_type == "hydrogen":
+    if lookup_vehicle_type == "hydrogen":
         return {
             "price": None,
             "source": "수소 공식가격 출처 (기관 규정 확인 후 연결)",
