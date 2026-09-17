@@ -14,7 +14,7 @@
       <h1>여비정산 자동화</h1>
       <p class="sub">거리와 여비 규칙을 단계별로 확인한 뒤 증빙과 PDF를 만듭니다.</p>
     </div>
-    <div class="badge">v0.8 RULES</div>
+    <div class="badge">v0.9 TWO-PAGE PDF</div>
   </section>
 
   <nav class="tabs" aria-label="여비정산 단계">
@@ -186,9 +186,9 @@
 
       <section class="card">
         <h2>증빙·출력</h2>
-        <div class="hint">현재는 계산 목록과 증빙을 검증하는 단계입니다. 최종 2페이지 여비신청서 PDF 레이아웃은 이 값들이 안정된 뒤 적용합니다.</div>
-        <button id="evidenceButton" type="button" disabled class="teal">오피넷 증빙 생성</button>
-        <button id="pdfButton" type="button" disabled class="dark">현재 산출내역 PDF (임시)</button>
+        <div class="hint">PDF는 양면 출력용 2페이지로 생성됩니다. 1쪽에는 여비신청서와 산출내역, 2쪽에는 거리·유가 산출근거와 오피넷 증빙을 배치합니다.</div>
+        <button id="evidenceButton" type="button" disabled class="teal">오피넷 증빙만 생성</button>
+        <button id="pdfButton" type="button" disabled class="dark">2페이지 여비신청서 PDF</button>
         <button class="secondary full" data-go="2" type="button">여비 상세로 돌아가기</button>
       </section>
     </div>
