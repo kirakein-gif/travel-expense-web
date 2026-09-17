@@ -26,7 +26,7 @@ class TravelRequest(BaseModel):
     provided_meals_count: int = Field(default=0, ge=0)
     training_stay_mode: TrainingStayMode = "nonresidential"
     training_round_trips: Optional[int] = Field(default=None, ge=1)
-    training_meal_claim_amount: int = Field(default=0, ge=0)
+    training_meal_claim_count: int = Field(default=0, ge=0)
 
     toll_fee: int = Field(default=0, ge=0)
     parking_fee: int = Field(default=0, ge=0)
@@ -74,7 +74,7 @@ class PriceRequest(BaseModel):
     provided_meals_count: int = Field(default=0, ge=0)
     training_stay_mode: TrainingStayMode = "nonresidential"
     training_round_trips: Optional[int] = Field(default=None, ge=1)
-    training_meal_claim_amount: int = Field(default=0, ge=0)
+    training_meal_claim_count: int = Field(default=0, ge=0)
 
     toll_fee: int = Field(default=0, ge=0)
     parking_fee: int = Field(default=0, ge=0)
@@ -87,11 +87,13 @@ class PriceResponse(BaseModel):
     price_source: Optional[str] = None
     price_cache_hit: bool = False
     evidence_status: str = "pending"
+    fuel_price_date: Optional[date] = None
 
     vehicle_label: Optional[str] = None
     effective_efficiency: Optional[float] = None
     efficiency_unit: Optional[str] = None
     calculation_formula: Optional[str] = None
+    transport_unit_cost: Optional[int] = None
     transport_distance_km: float = 0
     round_trip_count: float = 0
 
