@@ -13,7 +13,7 @@ ADDRESS_URL = "https://dapi.kakao.com/v2/local/search/address.json"
 KEYWORD_URL = "https://dapi.kakao.com/v2/local/search/keyword.json"
 DIRECTIONS_URL = "https://apis-navi.kakaomobility.com/v1/directions"
 
-# Institution searches are common in this app.  These hints let us prefer the
+# Institution searches are common in this app. These hints let us prefer the
 # actual public/educational institution over a bank branch, parking lot, cafe,
 # etc. that merely contains the same words in its place name.
 PUBLIC_INSTITUTION_HINTS = (
@@ -33,15 +33,17 @@ BUSINESS_WORDS = (
 PUBLIC_CATEGORY_WORDS = ("사회,공공기관", "공공기관", "교육", "학교")
 
 # Normalize common official/colloquial administrative names for comparison.
+# City-level replacements intentionally keep the trailing "시" so that
+# "부산광역시청" and "부산시청" become the same comparison key.
 ADMIN_NAME_REPLACEMENTS = (
-    ("세종특별자치시", "세종"),
-    ("서울특별시", "서울"),
-    ("부산광역시", "부산"),
-    ("대구광역시", "대구"),
-    ("인천광역시", "인천"),
-    ("광주광역시", "광주"),
-    ("대전광역시", "대전"),
-    ("울산광역시", "울산"),
+    ("세종특별자치시", "세종시"),
+    ("서울특별시", "서울시"),
+    ("부산광역시", "부산시"),
+    ("대구광역시", "대구시"),
+    ("인천광역시", "인천시"),
+    ("광주광역시", "광주시"),
+    ("대전광역시", "대전시"),
+    ("울산광역시", "울산시"),
     ("충청남도", "충남"),
     ("충청북도", "충북"),
     ("전북특별자치도", "전북"),
@@ -81,9 +83,9 @@ def _looks_like_address(query: str) -> bool:
     """Return True for practical road/lot-number address patterns.
 
     Place names such as '부산시청' or '충청남도교육청 교육연수원' should not be
-    sent to the address API first because its default similar analysis can
-    partially match another building.  Real travel addresses almost always
-    contain a number together with a road/lot administrative token.
+    sent to the address API first because similar analysis can partially match
+    another building. Real travel addresses almost always contain a number
+    together with a road/lot administrative token.
     """
     q = re.sub(r"\s+", " ", (query or "").strip())
     if not re.search(r"\d", q):
@@ -171,9 +173,8 @@ async def _search_keyword(client: httpx.AsyncClient, query: str) -> tuple[dict, 
     docs = r.json().get("documents", [])
     best, score = _best_keyword_document(query, docs)
 
-    # On a low-confidence result, retry once without spaces.  This helps exact
-    # registered place names such as '충청남도교육청교육연수원' while keeping API
-    # usage to one call for normal searches.
+    # On a low-confidence result, retry once without spaces. This helps exact
+    # registered place names while keeping API usage to one call normally.
     compact_query = re.sub(r"\s+", "", query.strip())
     if score < 500 and compact_query != query.strip():
         r2 = await client.get(
@@ -199,8 +200,8 @@ async def geocode(query: str) -> dict:
     Address-like input uses the address API. Institution/place input uses Kakao
     keyword search and a conservative post-ranking tuned for public institutions.
     """
-    # v2 invalidates older 30-day cache entries produced by the previous matcher.
-    cache_key = _hash_key(f"geocode-v2|{query}")
+    # v3 invalidates older 30-day cache entries produced by previous matchers.
+    cache_key = _hash_key(f"geocode-v3|{query}")
 
     async def factory() -> dict:
         async with httpx.AsyncClient(timeout=20) as client:
