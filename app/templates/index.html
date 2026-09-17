@@ -12,9 +12,9 @@
     <div>
       <p class="eyebrow">TRAVEL EXPENSE AUTOMATION</p>
       <h1>여비정산 자동화</h1>
-      <p class="sub">출장 정보 한 번 입력으로 거리·적용단가·자동차운임·증빙을 계산합니다.</p>
+      <p class="sub">기관명 또는 주소를 입력하면 장소 확인 → 거리 → 적용단가 → 자동차운임 순서로 계산합니다.</p>
     </div>
-    <div class="badge">v0.3 PROGRESSIVE</div>
+    <div class="badge">v0.4 PLACE SEARCH</div>
   </section>
 
   <section class="grid">
@@ -22,7 +22,7 @@
       <h2>출장 정보</h2>
       <label>출장일<input id="travel_date" type="date" required></label>
       <label>출발지<input id="origin" type="text" placeholder="예: 천안버들유치원" required></label>
-      <label>출장지<input id="destination" type="text" placeholder="예: 충청남도교육청 또는 내포" required></label>
+      <label>출장지<input id="destination" type="text" placeholder="예: 홍성교육지원청 또는 내포" required></label>
       <label>차량 종류
         <select id="vehicle_type">
           <option value="gasoline">휘발유</option>
@@ -45,6 +45,8 @@
       <h2>산출 결과</h2>
       <div id="status" class="status">출장 정보를 입력하고 자동 계산을 눌러주세요.</div>
       <dl>
+        <div><dt>출발지 확인</dt><dd id="resolved_origin">-</dd></div>
+        <div><dt>출장지 확인</dt><dd id="resolved_destination">-</dd></div>
         <div><dt>총 운행거리</dt><dd id="distance">-</dd></div>
         <div><dt>거리 기준</dt><dd id="distance_source">-</dd></div>
         <div><dt>기준 목적지</dt><dd id="destination_code">-</dd></div>
@@ -75,7 +77,15 @@ function payloadFromForm() {
   };
 }
 
+function placeText(name, address) {
+  if (!name && !address) return "-";
+  if (!name || name === address) return address || name;
+  return `${name} · ${address}`;
+}
+
 function resetResult() {
+  document.getElementById("resolved_origin").textContent = "-";
+  document.getElementById("resolved_destination").textContent = "-";
   document.getElementById("distance").textContent = "-";
   document.getElementById("distance_source").textContent = "-";
   document.getElementById("destination_code").textContent = "-";
@@ -94,7 +104,7 @@ form.addEventListener("submit", async e => {
   const payload = payloadFromForm();
 
   try {
-    document.getElementById("status").textContent = "1/2 주소 확인 및 거리 계산 중...";
+    document.getElementById("status").textContent = "1/2 기관명·주소 확인 및 거리 계산 중...";
 
     const distanceResponse = await fetch("/api/distance", {
       method: "POST",
@@ -104,6 +114,14 @@ form.addEventListener("submit", async e => {
     const distanceData = await distanceResponse.json();
     if (!distanceResponse.ok) throw new Error(distanceData.detail || "거리 계산 실패");
 
+    document.getElementById("resolved_origin").textContent = placeText(
+      distanceData.resolved_origin_name,
+      distanceData.resolved_origin_address
+    );
+    document.getElementById("resolved_destination").textContent = placeText(
+      distanceData.resolved_destination_name,
+      distanceData.resolved_destination_address
+    );
     document.getElementById("distance").textContent = fmt(distanceData.distance_km) + " km";
     document.getElementById("distance_source").textContent = distanceData.distance_source + (distanceData.distance_cache_hit ? " · 캐시" : "");
     document.getElementById("destination_code").textContent = distanceData.destination_support_office || distanceData.destination_code || distanceData.sigungu || "-";
