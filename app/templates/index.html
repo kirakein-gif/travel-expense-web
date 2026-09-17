@@ -14,7 +14,7 @@
       <h1>여비정산 자동화</h1>
       <p class="sub">출장 정보 한 번 입력으로 거리·적용단가·자동차운임·증빙을 계산합니다.</p>
     </div>
-    <div class="badge">v0.2 PRE-CLOUD</div>
+    <div class="badge">v0.3 PROGRESSIVE</div>
   </section>
 
   <section class="grid">
@@ -37,7 +37,7 @@
         <span class="help">일반차 km/L · 전기차 km/kWh · 수소차 km/kg</span>
       </label>
       <label class="check"><input id="round_trip" type="checkbox" checked>왕복으로 계산</label>
-      <button type="submit">자동 계산</button>
+      <button id="calculateButton" type="submit">자동 계산</button>
       <button id="pdfButton" type="button" disabled style="margin-top:10px;background:#475569">PDF 산출내역</button>
     </form>
 
@@ -59,6 +59,7 @@
 
 <script>
 const form = document.getElementById("travelForm");
+const calculateButton = document.getElementById("calculateButton");
 const pdfButton = document.getElementById("pdfButton");
 const fmt = n => n == null ? "-" : Number(n).toLocaleString("ko-KR");
 let lastPayload = null;
@@ -74,33 +75,85 @@ function payloadFromForm() {
   };
 }
 
+function resetResult() {
+  document.getElementById("distance").textContent = "-";
+  document.getElementById("distance_source").textContent = "-";
+  document.getElementById("destination_code").textContent = "-";
+  document.getElementById("price").textContent = "-";
+  document.getElementById("amount").textContent = "-";
+  document.getElementById("source").textContent = "-";
+  document.getElementById("evidence").textContent = "-";
+}
+
 form.addEventListener("submit", async e => {
   e.preventDefault();
-  document.getElementById("status").textContent = "계산 중...";
+  resetResult();
+  calculateButton.disabled = true;
   pdfButton.disabled = true;
+  lastPayload = null;
   const payload = payloadFromForm();
 
   try {
-    const r = await fetch("/api/estimate", {
+    document.getElementById("status").textContent = "1/2 주소 확인 및 거리 계산 중...";
+
+    const distanceResponse = await fetch("/api/distance", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify(payload)
     });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || "요청 실패");
+    const distanceData = await distanceResponse.json();
+    if (!distanceResponse.ok) throw new Error(distanceData.detail || "거리 계산 실패");
 
-    document.getElementById("distance").textContent = fmt(data.distance_km) + " km";
-    document.getElementById("distance_source").textContent = data.distance_source + (data.distance_cache_hit ? " · 캐시" : "");
-    document.getElementById("destination_code").textContent = data.destination_support_office || data.destination_code || "-";
-    document.getElementById("price").textContent = data.energy_price == null ? "연결 예정" : fmt(data.energy_price) + " 원";
-    document.getElementById("amount").textContent = data.estimated_transport_cost == null ? "단가 연결 후 계산" : fmt(data.estimated_transport_cost) + " 원";
-    document.getElementById("source").textContent = (data.price_source || "-") + (data.price_cache_hit ? " · 캐시" : "");
-    document.getElementById("evidence").textContent = data.evidence_status;
+    document.getElementById("distance").textContent = fmt(distanceData.distance_km) + " km";
+    document.getElementById("distance_source").textContent = distanceData.distance_source + (distanceData.distance_cache_hit ? " · 캐시" : "");
+    document.getElementById("destination_code").textContent = distanceData.destination_support_office || distanceData.destination_code || distanceData.sigungu || "-";
+
+    document.getElementById("status").textContent = "거리 계산 완료 · 2/2 유가 조회 중...";
+    document.getElementById("price").textContent = "조회 중...";
+    document.getElementById("amount").textContent = "단가 대기 중...";
+    document.getElementById("source").textContent = "오피넷 조회 중...";
+    document.getElementById("evidence").textContent = "준비 중...";
+
+    const pricePayload = {
+      travel_date: payload.travel_date,
+      vehicle_type: payload.vehicle_type,
+      efficiency: payload.efficiency,
+      distance_km: distanceData.distance_km,
+      province: distanceData.province,
+      sigungu: distanceData.sigungu
+    };
+
+    const priceResponse = await fetch("/api/price", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(pricePayload)
+    });
+    const priceData = await priceResponse.json();
+    if (!priceResponse.ok) {
+      throw new Error("유가 조회 실패: " + (priceData.detail || "요청 실패"));
+    }
+
+    document.getElementById("price").textContent = priceData.energy_price == null ? "연결 예정" : fmt(priceData.energy_price) + " 원";
+    document.getElementById("amount").textContent = priceData.estimated_transport_cost == null ? "단가 연결 후 계산" : fmt(priceData.estimated_transport_cost) + " 원";
+    document.getElementById("source").textContent = (priceData.price_source || "-") + (priceData.price_cache_hit ? " · 캐시" : "");
+    document.getElementById("evidence").textContent = priceData.evidence_status;
     document.getElementById("status").textContent = "계산 완료";
+
     lastPayload = payload;
     pdfButton.disabled = false;
   } catch (err) {
-    document.getElementById("status").textContent = err.message;
+    const distanceDone = document.getElementById("distance").textContent !== "-";
+    document.getElementById("status").textContent = distanceDone
+      ? "거리 계산 완료 · " + err.message
+      : err.message;
+    if (distanceDone && document.getElementById("price").textContent === "조회 중...") {
+      document.getElementById("price").textContent = "조회 실패";
+      document.getElementById("amount").textContent = "-";
+      document.getElementById("source").textContent = "-";
+      document.getElementById("evidence").textContent = "failed";
+    }
+  } finally {
+    calculateButton.disabled = false;
   }
 });
 
