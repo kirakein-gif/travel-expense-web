@@ -125,17 +125,51 @@ async def _clear_all_regions(page: Page) -> None:
             return
 
 
-async def _select_province_dropdown(page: Page, province: str) -> None:
-    """Select the province in OPINET's 시도/시군구 drill-down selects.
+async def _set_hidden_select_by_label(page: Page, selector: str, labels: list[str]) -> bool:
+    """Set a select even when OPINET keeps the native control hidden.
 
-    The page currently has both province checkboxes and a separate pair of
-    region selects. Province checkboxes produce the nationwide 시도 average
-    table; the select control is what drills into 시군구 rows.
+    OPINET decorates some select boxes and hides the original <select>. Playwright's
+    select_option waits for visibility, so use DOM JavaScript and dispatch the same
+    events the page listens for.
     """
-    candidates = _province_option_candidates(province)
-    selects = page.locator("select")
-    matches: list[tuple[int, str]] = []
+    locator = page.locator(selector)
+    if not await locator.count():
+        return False
 
+    result = await locator.first.evaluate(
+        """
+        (select, labels) => {
+            const norm = (v) => (v || '').replace(/\\s+/g, ' ').trim();
+            const wanted = labels.map(norm);
+            const options = Array.from(select.options || []);
+            const option = options.find((o) => wanted.includes(norm(o.textContent)))
+                || options.find((o) => wanted.includes(norm(o.label)))
+                || options.find((o) => wanted.includes(norm(o.value)));
+            if (!option) return null;
+
+            select.value = option.value;
+            option.selected = true;
+            select.dispatchEvent(new Event('input', { bubbles: true }));
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            return { value: option.value, text: norm(option.textContent) };
+        }
+        """,
+        labels,
+    )
+    return result is not None
+
+
+async def _select_province_dropdown(page: Page, province: str) -> None:
+    """Select OPINET province drill-down, including hidden native selects."""
+    candidates = _province_option_candidates(province)
+
+    # Current OPINET uses this hidden native select behind a styled control.
+    if await _set_hidden_select_by_label(page, "#sido_cd", candidates):
+        await page.wait_for_timeout(1200)
+        return
+
+    # Fallback for future DOM changes: inspect every select and set via JS.
+    selects = page.locator("select")
     for si in range(await selects.count()):
         select = selects.nth(si)
         options = select.locator("option")
@@ -147,26 +181,34 @@ async def _select_province_dropdown(page: Page, province: str) -> None:
             re.sub(r"\s+", " ", (await options.nth(oi).inner_text()).strip())
             for oi in range(option_count)
         ]
-        for candidate in candidates:
-            if candidate in texts:
-                matches.append((si, candidate))
-                break
+        if not any(candidate in texts for candidate in candidates):
+            continue
 
-    if not matches:
-        raise RuntimeError(f"오피넷 시도 선택 드롭다운에서 {province}을(를) 찾지 못했습니다.")
+        selector = f"select:nth-of-type({si + 1})"
+        # nth-of-type can differ across parents, so evaluate the locator directly.
+        result = await select.evaluate(
+            """
+            (el, labels) => {
+                const norm = (v) => (v || '').replace(/\\s+/g, ' ').trim();
+                const wanted = labels.map(norm);
+                const option = Array.from(el.options || []).find(
+                    (o) => wanted.includes(norm(o.textContent)) || wanted.includes(norm(o.label))
+                );
+                if (!option) return false;
+                el.value = option.value;
+                option.selected = true;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                return true;
+            }
+            """,
+            candidates,
+        )
+        if result:
+            await page.wait_for_timeout(1200)
+            return
 
-    # Prefer a visible select because the page can contain hidden duplicate controls.
-    selected_index: Optional[int] = None
-    selected_label: Optional[str] = None
-    for si, label in matches:
-        if await selects.nth(si).is_visible():
-            selected_index, selected_label = si, label
-            break
-    if selected_index is None:
-        selected_index, selected_label = matches[0]
-
-    await selects.nth(selected_index).select_option(label=selected_label)
-    await page.wait_for_timeout(900)
+    raise RuntimeError(f"오피넷 시도 선택 드롭다운에서 {province}을(를) 찾지 못했습니다.")
 
 
 async def _click_search(page: Page) -> None:
@@ -242,14 +284,8 @@ async def _extract_region_price_table(page: Page, product_label: str) -> dict[st
 async def _prepare_oil_page(page: Page, travel_date: date, province: str, vehicle_type: str) -> None:
     await page.goto(OIL_URL, wait_until="networkidle", timeout=60_000)
     await _select_date(page, travel_date)
-
-    # Current OPINET has two region controls. The checkbox list compares
-    # province averages, while the 시도 select drills down to 시군구.
     await _select_province_dropdown(page, province)
 
-    # Product selection is retained for a cleaner evidence screen. If OPINET
-    # changes the duplicate checkbox layout, extraction still targets the
-    # requested product column from the resulting table.
     try:
         await _select_by_id_or_label(page, PRODUCT_IDS[vehicle_type], PRODUCT_LABELS[vehicle_type])
     except Exception:
@@ -265,7 +301,6 @@ async def _prepare_lpg_page(page: Page, travel_date: date, province: str) -> Non
     try:
         await _select_province_dropdown(page, province)
     except Exception:
-        # Keep the old checkbox path as fallback on the LPG statistics page.
         await _clear_all_regions(page)
         base_id = SIDO_IDS.get(province)
         if not base_id:
