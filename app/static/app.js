@@ -62,6 +62,17 @@ function suggestedTrainingTrips(){
   if(mode==="nonresidential") return d;
   return Math.min(d,Math.max(1,Number($("training_round_trips").value||1)));
 }
+function populateProvidedMealCounts(){
+  const select=$("provided_meals_count"), current=Number(select.value||0), max=days()*3;
+  select.innerHTML='';
+  for(let i=0;i<=max;i++){
+    const opt=document.createElement('option');
+    opt.value=String(i);
+    opt.textContent=i===0?'0식 · 제공 없음':`${i}식`;
+    select.appendChild(opt);
+  }
+  select.value=String(Math.min(current,max));
+}
 function populateTrainingMealCounts(){
   const select=$("training_meal_claim_count"), current=Number(select.value||0), max=days()*3;
   select.innerHTML='';
@@ -121,7 +132,7 @@ function updateManualPriceVisibility(){
 
 [$("vehicle_type"),$("phev_energy_source")].forEach(el=>el.addEventListener('change',()=>{clearPriceReview();updateVehicle();}));
 [$("trip_type"),$("round_trip")].forEach(el=>el.addEventListener('change',()=>{clearPriceReview();updateTripType();}));
-[$("travel_date"),$("end_date")].forEach(el=>el.addEventListener('change',()=>{clearPriceReview();populateTrainingMealCounts();updateTripType();updateManualPriceVisibility();}));
+[$("travel_date"),$("end_date")].forEach(el=>el.addEventListener('change',()=>{clearPriceReview();populateProvidedMealCounts();populateTrainingMealCounts();updateTripType();updateManualPriceVisibility();}));
 [$("training_stay_mode"),$("training_round_trips")].forEach(el=>el.addEventListener('change',()=>{clearPriceReview();updateTraining();updateManualPriceVisibility();}));
 $("training_meal_claim_count").addEventListener('change',clearPriceReview);
 ["provided_meals_count","public_vehicle","toll_fee","parking_fee","lodging_fee","manual_energy_price"].forEach(id=>$(id).addEventListener('change',()=>{clearPriceReview();updateManualPriceVisibility();}));
@@ -129,7 +140,7 @@ $("training_meal_claim_count").addEventListener('change',clearPriceReview);
 
 const today=seoulToday();
 $("travel_date").value=today; $("end_date").value=today;
-populateTrainingMealCounts(); updateVehicle(); updateTripType(); updateManualPriceVisibility();
+populateProvidedMealCounts(); populateTrainingMealCounts(); updateVehicle(); updateTripType(); updateManualPriceVisibility();
 
 $("distanceNextButton").addEventListener('click',()=>{if(lastDistance) setTab(2);});
 $("resultNextButton").addEventListener('click',()=>{if(lastPayload) setTab(3);});
