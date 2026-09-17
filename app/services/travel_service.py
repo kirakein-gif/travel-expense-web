@@ -146,15 +146,6 @@ def _formula(
 async def resolve_price(req: PriceRequest) -> PriceResponse:
     spec = get_vehicle_spec(req.vehicle_type, req.phev_energy_source)
 
-    # 현재 유가 기준일은 출장 시작일이다.
-    price_result = await get_energy_price(
-        req.travel_date,
-        req.vehicle_type,
-        req.province,
-        req.sigungu,
-        req.phev_energy_source,
-    )
-
     one_way_km = req.one_way_distance_km
     if one_way_km is None:
         one_way_km = req.distance_km / (2 if req.round_trip else 1)
@@ -188,30 +179,52 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
     training_inside = req.trip_type == "training" and same_work_area(req.origin_sigungu, req.sigungu)
 
     if training_inside:
+        price_result = {
+            "price": None,
+            "source": "교육훈련(근무지내) · 유가조회 생략",
+            "evidence_status": "not_required",
+            "cache_hit": False,
+        }
         amount = 0
         formula = "교육훈련(근무지내 지역): 운임 지급하지 않음"
     elif req.public_vehicle:
+        price_result = {
+            "price": None,
+            "source": "공용차량 이용 · 유가조회 생략",
+            "evidence_status": "not_required",
+            "cache_hit": False,
+        }
         amount = 0
         formula = "공용차량 이용: 자가용 자동차운임 지급하지 않음"
-    elif price_result["price"] is not None:
-        unit_cost, amount = calculate_repeated_transport_cost(
-            one_way_km=one_way_km,
-            efficiency=float(spec.efficiency),
-            unit_price=float(price_result["price"]),
-            round_trip_count=round_trips,
+    else:
+        # 유가 기준일은 출장 시작일이다. 오피넷 당일 일평균 가격은 price_service에서 방어한다.
+        price_result = await get_energy_price(
+            req.travel_date,
+            req.vehicle_type,
+            req.province,
+            req.sigungu,
+            req.phev_energy_source,
         )
-        formula = _formula(
-            one_way_km=one_way_km,
-            unit_price=float(price_result["price"]),
-            efficiency=float(spec.efficiency),
-            efficiency_unit=spec.efficiency_unit,
-            unit_cost=unit_cost,
-            total_cost=amount,
-            round_trip_count=round_trips,
-            trip_type=req.trip_type,
-            training_stay_mode=req.training_stay_mode,
-            days=trip_days(req.travel_date, req.end_date),
-        )
+
+        if price_result["price"] is not None:
+            unit_cost, amount = calculate_repeated_transport_cost(
+                one_way_km=one_way_km,
+                efficiency=float(spec.efficiency),
+                unit_price=float(price_result["price"]),
+                round_trip_count=round_trips,
+            )
+            formula = _formula(
+                one_way_km=one_way_km,
+                unit_price=float(price_result["price"]),
+                efficiency=float(spec.efficiency),
+                efficiency_unit=spec.efficiency_unit,
+                unit_cost=unit_cost,
+                total_cost=amount,
+                round_trip_count=round_trips,
+                trip_type=req.trip_type,
+                training_stay_mode=req.training_stay_mode,
+                days=trip_days(req.travel_date, req.end_date),
+            )
 
     total = None
     if amount is not None:
@@ -230,7 +243,7 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         price_source=price_result["source"],
         price_cache_hit=bool(price_result.get("cache_hit")),
         evidence_status=price_result["evidence_status"],
-        fuel_price_date=req.travel_date,
+        fuel_price_date=req.travel_date if price_result["price"] is not None else None,
         vehicle_label=spec.label,
         effective_efficiency=float(spec.efficiency),
         efficiency_unit=spec.efficiency_unit,
