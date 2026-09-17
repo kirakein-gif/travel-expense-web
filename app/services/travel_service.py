@@ -19,6 +19,11 @@ from app.services.chungnam_policy import (
 )
 from app.services.kakao_service import driving_distance, geocode
 from app.services.price_service import get_energy_price
+from app.services.travel_policy import (
+    calculate_allowances,
+    get_vehicle_spec,
+    same_work_area,
+)
 
 
 async def resolve_distance(req: TravelRequest) -> DistanceResponse:
@@ -79,16 +84,12 @@ async def resolve_distance(req: TravelRequest) -> DistanceResponse:
 
     distance_km = one_way_km * (2 if req.round_trip else 1)
 
-    # Fuel-price region must remain the actual administrative location.
-    # A Yesan-side Naepo destination still uses Yesan-gun for Opinet pricing,
-    # while only the fixed-distance code is normalized to NAEPO.
     province = destination.get("region_1depth_name", "")
     sigungu = destination.get("region_2depth_name", "")
+    origin_province = origin.get("region_1depth_name", "")
+    origin_sigungu = origin.get("region_2depth_name", "")
     if not province or not sigungu:
         raise ValueError("출장지의 시도/시군구를 판별하지 못했습니다.")
-
-    resolved_origin_name = origin.get("resolved_name")
-    resolved_destination_name = destination.get("resolved_name")
 
     return DistanceResponse(
         distance_km=round(distance_km, 1),
@@ -107,28 +108,81 @@ async def resolve_distance(req: TravelRequest) -> DistanceResponse:
         distance_cache_hit=distance_cache_hit,
         province=province,
         sigungu=sigungu,
-        resolved_origin_name=resolved_origin_name,
+        origin_province=origin_province,
+        origin_sigungu=origin_sigungu,
+        resolved_origin_name=origin.get("resolved_name"),
         resolved_origin_address=origin.get("resolved_address") or origin.get("address_name"),
-        resolved_destination_name=resolved_destination_name,
+        resolved_destination_name=destination.get("resolved_name"),
         resolved_destination_address=(
             destination.get("resolved_address") or destination.get("address_name")
         ),
     )
 
 
+def _formula(distance_km: float, unit_price: float, efficiency: float, efficiency_unit: str, amount: int) -> str:
+    price_unit = "원/L"
+    if efficiency_unit == "km/kWh":
+        price_unit = "원/kWh"
+    elif efficiency_unit == "km/kg":
+        price_unit = "원/kg"
+    return (
+        f"{distance_km:,.1f}km × {unit_price:,.2f}{price_unit} ÷ "
+        f"{efficiency:g}{efficiency_unit} = {amount:,.0f}원"
+    )
+
+
 async def resolve_price(req: PriceRequest) -> PriceResponse:
+    spec = get_vehicle_spec(req.vehicle_type, req.phev_energy_source)
     price_result = await get_energy_price(
         req.travel_date,
         req.vehicle_type,
         req.province,
         req.sigungu,
+        req.phev_energy_source,
     )
+
+    allowances = calculate_allowances(
+        start_date=req.travel_date,
+        end_date=req.end_date,
+        trip_type=req.trip_type,
+        public_vehicle=req.public_vehicle,
+        provided_meals_count=req.provided_meals_count,
+        training_residential=req.training_residential,
+        training_meal_claim_amount=req.training_meal_claim_amount,
+        origin_sigungu=req.origin_sigungu,
+        destination_sigungu=req.sigungu,
+    )
+
     amount = None
-    if price_result["price"] is not None:
+    formula = None
+    training_inside = req.trip_type == "training" and same_work_area(req.origin_sigungu, req.sigungu)
+
+    if training_inside:
+        amount = 0
+        formula = "교육훈련(근무지내 지역): 운임 지급하지 않음"
+    elif price_result["price"] is not None:
         amount = calculate_transport_cost(
             req.distance_km,
-            req.efficiency,
+            float(spec.efficiency),
             price_result["price"],
+        )
+        formula = _formula(
+            req.distance_km,
+            float(price_result["price"]),
+            float(spec.efficiency),
+            spec.efficiency_unit,
+            amount,
+        )
+
+    total = None
+    if amount is not None:
+        total = (
+            amount
+            + allowances["daily_allowance"]
+            + allowances["meal_allowance"]
+            + req.toll_fee
+            + req.parking_fee
+            + req.lodging_fee
         )
 
     return PriceResponse(
@@ -137,6 +191,20 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         price_source=price_result["source"],
         price_cache_hit=bool(price_result.get("cache_hit")),
         evidence_status=price_result["evidence_status"],
+        vehicle_label=spec.label,
+        effective_efficiency=float(spec.efficiency),
+        efficiency_unit=spec.efficiency_unit,
+        calculation_formula=formula,
+        trip_days=allowances["trip_days"],
+        daily_allowance=allowances["daily_allowance"],
+        meal_allowance=allowances["meal_allowance"],
+        toll_fee=req.toll_fee,
+        parking_fee=req.parking_fee,
+        lodging_fee=req.lodging_fee,
+        total_expense=total,
+        training_scope=allowances["training_scope"],
+        daily_note=allowances["daily_note"],
+        meal_note=allowances["meal_note"],
     )
 
 
@@ -145,11 +213,22 @@ async def estimate_travel(req: TravelRequest) -> EstimateResponse:
     price = await resolve_price(
         PriceRequest(
             travel_date=req.travel_date,
+            end_date=req.end_date,
             vehicle_type=req.vehicle_type,
+            phev_energy_source=req.phev_energy_source,
             efficiency=req.efficiency,
             distance_km=distance.distance_km,
             province=distance.province,
             sigungu=distance.sigungu,
+            origin_sigungu=distance.origin_sigungu,
+            trip_type=req.trip_type,
+            public_vehicle=req.public_vehicle,
+            provided_meals_count=req.provided_meals_count,
+            training_residential=req.training_residential,
+            training_meal_claim_amount=req.training_meal_claim_amount,
+            toll_fee=req.toll_fee,
+            parking_fee=req.parking_fee,
+            lodging_fee=req.lodging_fee,
         )
     )
 
