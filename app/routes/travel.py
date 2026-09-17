@@ -99,9 +99,9 @@ async def report_pdf(req: TravelRequest, background_tasks: BackgroundTasks):
         evidence_error = None
         evidence_vehicle = _evidence_vehicle(req)
 
-        # PDF generation may be slower than the normal calculation because the
-        # official Opinet evidence is generated only at this final-output stage.
-        if (
+        if result.evidence_status == "manual_price":
+            evidence_error = "당일 오피넷 일평균 미제공으로 적용 유가를 사용자가 직접 입력했습니다."
+        elif (
             evidence_vehicle
             and result.energy_price is not None
             and not req.public_vehicle
@@ -116,8 +116,6 @@ async def report_pdf(req: TravelRequest, background_tasks: BackgroundTasks):
                     evidence_dir=evidence_dir,
                 )
             except Exception as e:
-                # Keep the report printable even if the website evidence changes.
-                # Page 2 will show the evidence error instead of silently omitting it.
                 evidence_error = str(e)
 
         await generate_estimate_pdf(
