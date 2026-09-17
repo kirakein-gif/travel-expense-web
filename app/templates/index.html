@@ -14,7 +14,7 @@
       <h1>여비정산 자동화</h1>
       <p class="sub">거리와 여비 규칙을 단계별로 확인한 뒤 증빙과 PDF를 만듭니다.</p>
     </div>
-    <div class="badge">v0.9 TWO-PAGE PDF</div>
+    <div class="badge">v1.0 REVIEW FLOW</div>
   </section>
 
   <nav class="tabs" aria-label="여비정산 단계">
@@ -66,12 +66,15 @@
           <span class="help">제공해주신 승용차 유종별 연비(전비) 기준을 자동 적용합니다.</span>
         </label>
         <label id="roundTripWrap" class="check"><input id="round_trip" type="checkbox" checked>왕복으로 계산</label>
-        <button id="distanceButton" type="button">거리 확인 후 다음</button>
+        <div class="button-row review-actions">
+          <button id="distanceButton" type="button">거리 확인</button>
+          <button id="distanceNextButton" type="button" disabled>다음 : 여비 상세</button>
+        </div>
       </section>
 
       <section class="card result compact-result">
         <h2>거리 확인</h2>
-        <div class="hint">기관명은 카카오 장소검색으로 주소·좌표를 확인하고, 충남 내부는 고정거리표를 우선 적용합니다.</div>
+        <div class="hint">기관명은 카카오 장소검색으로 주소·좌표를 확인하고, 충남 내부는 고정거리표를 우선 적용합니다. 확인 후 직접 다음 단계로 이동합니다.</div>
         <dl>
           <div><dt>출발지 확인</dt><dd id="resolved_origin">-</dd></div>
           <div><dt>출장지 확인</dt><dd id="resolved_destination">-</dd></div>
@@ -126,19 +129,18 @@
         </div>
         <label>숙박비<input id="lodging_fee" type="number" min="0" step="1" value="0"></label>
 
-        <details class="optional-box">
-          <summary>신청인 정보 · 최종 PDF용</summary>
-          <div class="two">
-            <label>소속<input id="affiliation" type="text" placeholder="예: 천안버들유치원"></label>
-            <label>직급(직위)<input id="position" type="text" placeholder="예: 주무관"></label>
-          </div>
-          <label>성명<input id="traveler_name" type="text" placeholder="성명"></label>
-        </details>
-
-        <div class="button-row">
-          <button class="secondary" data-go="1" type="button">이전</button>
-          <button id="calculateButton" type="button">여비 계산</button>
+        <div class="section-label">신청인 정보 · PDF 작성용</div>
+        <div class="two">
+          <label>소속<input id="affiliation" type="text" placeholder="예: 천안버들유치원"></label>
+          <label>직급(직위)<input id="position" type="text" placeholder="예: 주무관"></label>
         </div>
+        <label>신청인 성명<input id="traveler_name" type="text" placeholder="예: 홍길동"></label>
+
+        <div class="button-row review-actions">
+          <button id="calculateButton" type="button">여비 계산</button>
+          <button id="resultNextButton" type="button" disabled>다음 : 결과·증빙</button>
+        </div>
+        <button class="secondary full" data-go="1" type="button">이전 : 출장·거리</button>
       </section>
 
       <section class="card result compact-result">
