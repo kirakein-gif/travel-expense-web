@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import html
+import re
 from pathlib import Path
 
 from playwright.async_api import async_playwright
@@ -49,6 +50,12 @@ def _place(name: str | None, address: str | None, fallback: str) -> str:
     return name or address or fallback
 
 
+def _passenger_names(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [name.strip() for name in re.split(r"[,;\n]+", value) if name.strip()]
+
+
 def _image_data_uri(path: str | None) -> str | None:
     if not path:
         return None
@@ -73,7 +80,18 @@ async def generate_estimate_pdf(
     origin = _place(result.resolved_origin_name, result.resolved_origin_address, req.origin)
     destination = _place(result.resolved_destination_name, result.resolved_destination_address, req.destination)
     applicant = " / ".join(v for v in [req.affiliation, req.position, req.traveler_name] if v) or "-"
-    passengers = req.passengers or "-"
+    passenger_names = _passenger_names(req.passengers)
+    passenger_signature_html = ""
+    if passenger_names:
+        passenger_items = "".join(
+            f'<span class="passenger-sign">{_e(name)}&nbsp;&nbsp;(서명)</span>'
+            for name in passenger_names
+        )
+        passenger_signature_html = (
+            '<div class="co-sign-row"><span class="sign-label">동승자</span>'
+            f'<div class="passenger-signs">{passenger_items}</div></div>'
+        )
+
     price_date = result.fuel_price_date.isoformat() if result.fuel_price_date else "-"
     round_trips = "편도" if result.round_trip_count == 0.5 else f"{result.round_trip_count:g}회"
     vehicle = result.vehicle_label or req.vehicle_type
@@ -99,40 +117,43 @@ async def generate_estimate_pdf(
 <style>
   @page {{ size: A4; margin: 10mm; }}
   * {{ box-sizing: border-box; }}
-  body {{ margin: 0; font-family: "Noto Sans CJK KR", "Noto Sans KR", "Malgun Gothic", sans-serif; color: #111827; font-size: 10.5px; }}
+  body {{ margin: 0; font-family: "Noto Sans CJK KR", "Noto Sans KR", "Malgun Gothic", sans-serif; color: #111827; font-size: 12px; }}
   .page {{ min-height: 277mm; position: relative; }}
   .page.break {{ page-break-after: always; }}
-  h1 {{ margin: 0 0 3mm; text-align: center; font-size: 20px; letter-spacing: .08em; }}
-  h2 {{ margin: 0 0 2mm; font-size: 13px; }}
-  .sub {{ text-align: center; color: #64748b; margin-bottom: 4mm; }}
+  h1 {{ margin: 0 0 2.5mm; text-align: center; font-size: 23px; letter-spacing: .07em; }}
+  h2 {{ margin: 0 0 1.8mm; font-size: 14.5px; }}
+  .sub {{ text-align: center; color: #475569; font-size: 11.5px; margin-bottom: 3mm; }}
   table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
-  th, td {{ border: 1px solid #64748b; padding: 2.1mm 2.4mm; vertical-align: middle; line-height: 1.45; }}
+  th, td {{ border: 1px solid #64748b; padding: 1.7mm 2.2mm; vertical-align: middle; line-height: 1.42; }}
   th {{ background: #f1f5f9; font-weight: 700; text-align: center; }}
   .label {{ width: 18%; }}
-  .passengers {{ white-space: pre-wrap; word-break: break-word; }}
   .money {{ text-align: right; font-weight: 700; }}
-  .total {{ font-size: 15px; font-weight: 800; text-align: right; background: #f8fafc; }}
-  .section {{ margin-top: 4mm; }}
-  .formula {{ padding: 3mm; border: 1px solid #cbd5e1; background: #f8fafc; line-height: 1.65; word-break: keep-all; }}
-  .small {{ font-size: 9px; color: #475569; }}
-  .declare {{ margin-top: 5mm; padding-top: 4mm; border-top: 1px solid #94a3b8; line-height: 1.8; }}
-  .sign {{ text-align: right; margin-top: 7mm; font-size: 11px; }}
+  .total {{ font-size: 16px; font-weight: 800; text-align: right; background: #f8fafc; }}
+  .section {{ margin-top: 3mm; }}
+  .formula {{ padding: 2.5mm; border: 1px solid #cbd5e1; background: #f8fafc; line-height: 1.58; word-break: keep-all; font-size: 11.5px; }}
+  .small {{ font-size: 10.5px; color: #334155; }}
+  .declare {{ margin-top: 3.5mm; padding-top: 3mm; border-top: 1px solid #94a3b8; line-height: 1.7; font-size: 11.5px; }}
+  .signature-block {{ margin-top: 3.5mm; page-break-inside: avoid; break-inside: avoid; font-size: 12.5px; }}
+  .sign-row {{ min-height: 8mm; display: flex; justify-content: flex-end; align-items: center; gap: 3mm; }}
+  .co-sign-row {{ min-height: 8mm; display: flex; justify-content: flex-end; align-items: flex-start; gap: 3mm; padding-top: 1mm; }}
+  .sign-label {{ font-weight: 700; flex: 0 0 auto; }}
+  .passenger-signs {{ display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 2mm 7mm; max-width: 82%; }}
+  .passenger-sign {{ white-space: nowrap; }}
   .page2-head {{ display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-bottom: 3mm; }}
-  .basis {{ border: 1px solid #cbd5e1; padding: 3mm; line-height: 1.6; min-height: 25mm; }}
-  .evidence-wrap {{ height: 228mm; border: 1px solid #cbd5e1; padding: 2mm; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; }}
+  .basis {{ border: 1px solid #cbd5e1; padding: 3mm; line-height: 1.6; min-height: 27mm; font-size: 11.5px; }}
+  .evidence-wrap {{ height: 218mm; border: 1px solid #cbd5e1; padding: 2mm; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; }}
   .evidence-img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
-  .evidence-empty {{ text-align: center; color: #64748b; line-height: 1.8; padding: 20mm; }}
-  .footer {{ position: absolute; bottom: 0; left: 0; right: 0; text-align: center; color: #94a3b8; font-size: 8px; }}
+  .evidence-empty {{ text-align: center; color: #475569; line-height: 1.8; padding: 20mm; font-size: 12px; }}
+  .footer {{ position: absolute; bottom: 0; left: 0; right: 0; text-align: center; color: #64748b; font-size: 9.5px; }}
 </style>
 </head>
 <body>
   <section class="page break">
     <h1>국내출장 여비신청서</h1>
-    <div class="sub">여비정산 자동화 - 실무형 1차 서식</div>
+    <div class="sub">여비정산 자동화 - 실무형 서식</div>
 
     <table>
       <tr><th class="label">신청인</th><td colspan="3">{_e(applicant)}</td></tr>
-      <tr><th>동승자</th><td colspan="3" class="passengers">{_e(passengers)}</td></tr>
       <tr><th>출장기간</th><td>{_e(_period(req))}</td><th>출장유형</th><td>{_e(_trip_type(req))}</td></tr>
       <tr><th>출장목적</th><td colspan="3">{_e(req.purpose)}</td></tr>
       <tr><th>출발지</th><td colspan="3">{_e(origin)}</td></tr>
@@ -168,7 +189,10 @@ async def generate_estimate_pdf(
     <div class="declare">
       「공무원 여비 규정」 제16조 제1항·제2항에 의하여 관계서류를 첨부하여 위와 같이 국내여비의 정산을 신청합니다.
     </div>
-    <div class="sign">신청인&nbsp;&nbsp; {_e(req.traveler_name or "________________")} &nbsp;&nbsp;(서명)</div>
+    <div class="signature-block">
+      <div class="sign-row"><span class="sign-label">신청인</span><span>{_e(req.traveler_name or "________________")}&nbsp;&nbsp;(서명)</span></div>
+      {passenger_signature_html}
+    </div>
     <div class="footer">1 / 2</div>
   </section>
 
