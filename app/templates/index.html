@@ -14,7 +14,7 @@
       <h1>여비정산 자동화</h1>
       <p class="sub">거리와 여비 규칙을 단계별로 확인한 뒤 증빙과 PDF를 만듭니다.</p>
     </div>
-    <div class="badge">v1.1 SAME-DAY</div>
+    <div class="badge">v1.2 PASSENGERS</div>
   </section>
 
   <nav class="tabs" aria-label="여비정산 단계">
@@ -142,6 +142,10 @@
           <label>직급(직위)<input id="position" type="text" placeholder="예: 주무관"></label>
         </div>
         <label>신청인 성명<input id="traveler_name" type="text" placeholder="예: 홍길동"></label>
+        <label>동승자
+          <textarea id="passengers" rows="3" placeholder="예: 김영희, 박철수, 이민수"></textarea>
+          <span class="help">동승자가 여러 명이면 쉼표(,) 또는 줄바꿈으로 한 번에 입력하세요. 나중에 출장신청서 PDF 자동입력 기능을 추가하면 이 칸을 자동으로 채운 뒤 수정할 수 있도록 연결할 예정입니다.</span>
+        </label>
 
         <div class="button-row review-actions">
           <button id="calculateButton" type="button">여비 계산</button>
