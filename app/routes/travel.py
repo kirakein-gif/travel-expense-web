@@ -11,10 +11,16 @@ from app.models import (
     PriceResponse,
     TravelRequest,
 )
+from app.services.opinet_api_service import check_opinet_api_status
 from app.services.pdf_service import generate_estimate_pdf
 from app.services.travel_service import estimate_travel, resolve_distance, resolve_price
 
 router = APIRouter(tags=["travel"])
+
+
+@router.get("/opinet-status")
+async def opinet_status():
+    return await check_opinet_api_status()
 
 
 @router.post("/distance", response_model=DistanceResponse)
