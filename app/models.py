@@ -19,6 +19,7 @@ class TravelRequest(BaseModel):
     vehicle_type: VehicleType
     phev_energy_source: Optional[PhevEnergySource] = None
     efficiency: Optional[float] = Field(default=None, gt=0)
+    manual_energy_price: Optional[float] = Field(default=None, gt=0)
     round_trip: bool = True
 
     trip_type: TripType = "normal"
@@ -62,6 +63,7 @@ class PriceRequest(BaseModel):
     vehicle_type: VehicleType
     phev_energy_source: Optional[PhevEnergySource] = None
     efficiency: Optional[float] = Field(default=None, gt=0)
+    manual_energy_price: Optional[float] = Field(default=None, gt=0)
     distance_km: float = Field(gt=0)
     one_way_distance_km: Optional[float] = Field(default=None, gt=0)
     round_trip: bool = True
