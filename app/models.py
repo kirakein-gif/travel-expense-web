@@ -24,6 +24,10 @@ class DistanceResponse(BaseModel):
     distance_cache_hit: bool = False
     province: str
     sigungu: str
+    resolved_origin_name: Optional[str] = None
+    resolved_origin_address: Optional[str] = None
+    resolved_destination_name: Optional[str] = None
+    resolved_destination_address: Optional[str] = None
 
 
 class PriceRequest(BaseModel):
