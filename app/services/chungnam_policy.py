@@ -55,6 +55,13 @@ def _special_from_master(code: str, reason: str) -> Optional[SpecialDestination]
 
 
 def resolve_special_destination(raw_destination: str) -> Optional[SpecialDestination]:
+    """Resolve explicit special-distance aliases such as Naepo.
+
+    Special aliases must match the whole normalized input. A substring match is
+    unsafe for parent-organization names. For example,
+    '충청남도교육청 충남교육연수원' contains '충청남도교육청' but refers to a
+    separate institution in Gongju and must not be forced to the Naepo office.
+    """
     compact = _compact(raw_destination)
     if not compact:
         return None
@@ -64,7 +71,7 @@ def resolve_special_destination(raw_destination: str) -> Optional[SpecialDestina
         aliases = item.get("aliases", [])
         for alias in aliases:
             alias_compact = _compact(alias)
-            if alias_compact and alias_compact in compact:
+            if alias_compact and alias_compact == compact:
                 return _special_from_master(code, "alias")
     return None
 
