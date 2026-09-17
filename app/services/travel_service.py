@@ -23,17 +23,33 @@ from app.services.price_service import get_energy_price
 async def resolve_distance(req: TravelRequest) -> DistanceResponse:
     origin = await geocode(req.origin)
     special_destination = resolve_special_destination(req.destination)
-    destination_query = special_destination.canonical_address if special_destination else req.destination
+    destination_query = (
+        special_destination.canonical_address
+        if special_destination
+        else req.destination
+    )
     destination = await geocode(destination_query)
 
     origin_is_chungnam = is_chungnam(origin.get("region_1depth_name", ""))
     destination_is_chungnam = is_chungnam(destination.get("region_1depth_name", ""))
-    origin_code = support_office_code(origin.get("region_2depth_name", "")) if origin_is_chungnam else None
-    destination_code = destination_distance_code(
-        destination.get("region_2depth_name", ""), special_destination
-    ) if destination_is_chungnam else None
+    origin_code = (
+        support_office_code(origin.get("region_2depth_name", ""))
+        if origin_is_chungnam
+        else None
+    )
+    destination_code = (
+        destination_distance_code(
+            destination.get("region_2depth_name", ""), special_destination
+        )
+        if destination_is_chungnam
+        else None
+    )
 
-    fixed_one_way = fixed_distance_km(origin_code, destination_code) if (origin_is_chungnam and destination_is_chungnam) else None
+    fixed_one_way = (
+        fixed_distance_km(origin_code, destination_code)
+        if (origin_is_chungnam and destination_is_chungnam)
+        else None
+    )
     distance_cache_hit = False
 
     if fixed_one_way is not None:
@@ -57,6 +73,12 @@ async def resolve_distance(req: TravelRequest) -> DistanceResponse:
     if not province or not sigungu:
         raise ValueError("출장지의 시도/시군구를 판별하지 못했습니다.")
 
+    resolved_destination_name = (
+        special_destination.label
+        if special_destination
+        else destination.get("resolved_name")
+    )
+
     return DistanceResponse(
         distance_km=round(distance_km, 1),
         distance_source=distance_source,
@@ -70,6 +92,14 @@ async def resolve_distance(req: TravelRequest) -> DistanceResponse:
         distance_cache_hit=distance_cache_hit,
         province=province,
         sigungu=sigungu,
+        resolved_origin_name=origin.get("resolved_name"),
+        resolved_origin_address=origin.get("resolved_address") or origin.get("address_name"),
+        resolved_destination_name=resolved_destination_name,
+        resolved_destination_address=(
+            special_destination.canonical_address
+            if special_destination
+            else destination.get("resolved_address") or destination.get("address_name")
+        ),
     )
 
 
