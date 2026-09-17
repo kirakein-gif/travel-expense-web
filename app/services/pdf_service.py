@@ -166,8 +166,7 @@ async def generate_estimate_pdf(
     </div>
 
     <div class="declare">
-      위와 같이 국내출장 여비를 신청합니다. 계산값은 입력된 출장정보와 적용 기준에 따라 자동 산출되었습니다.
-      최종 지급 전에는 소속 기관의 적용 기준 및 증빙을 확인합니다.
+      「공무원 여비 규정」 제16조 제1항·제2항에 의하여 관계서류를 첨부하여 위와 같이 국내여비의 정산을 신청합니다.
     </div>
     <div class="sign">신청인&nbsp;&nbsp; {_e(req.traveler_name or "________________")} &nbsp;&nbsp;(서명)</div>
     <div class="footer">1 / 2</div>
