@@ -1,12 +1,25 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from app.browser.opinet_browser import normalize_sigungu, query_opinet_region_prices
 from app.config import OPINET_API_KEY
 from app.services.cache_service import cache
 from app.services.opinet_api_service import get_historical_area_price
 from app.services.travel_policy import get_vehicle_spec
+
+
+def _seoul_today() -> date:
+    return datetime.now(ZoneInfo("Asia/Seoul")).date()
+
+
+def _ensure_opinet_date_available(travel_date: date) -> None:
+    if travel_date >= _seoul_today():
+        raise ValueError(
+            "오피넷 지역별 일평균 유가는 당일 자료가 제공되지 않습니다. "
+            "출장 시작일을 전일 또는 이전 날짜로 선택해주세요."
+        )
 
 
 def _find_sigungu_price(prices: dict[str, float], sigungu_name: str) -> float:
@@ -39,6 +52,7 @@ async def _get_browser_price(
     province_name: str,
     sigungu_name: str,
 ) -> dict:
+    _ensure_opinet_date_available(travel_date)
     cache_key = f"v4|{travel_date.isoformat()}|{province_name}|{lookup_vehicle_type}"
 
     async def factory() -> dict:
@@ -59,7 +73,7 @@ async def _get_browser_price(
         "fuel_price",
         cache_key,
         factory,
-        ttl_seconds=None if travel_date < date.today() else 21600,
+        ttl_seconds=None,
     )
 
     price = _find_sigungu_price(cached_result["prices"], sigungu_name)
@@ -84,6 +98,7 @@ async def get_energy_price(
     lookup_vehicle_type = spec.price_vehicle_type
 
     if lookup_vehicle_type in {"gasoline", "diesel", "lpg"}:
+        _ensure_opinet_date_available(travel_date)
         if OPINET_API_KEY:
             try:
                 api_result = await get_historical_area_price(
