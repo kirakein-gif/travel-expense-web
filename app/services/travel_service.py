@@ -13,6 +13,7 @@ from app.services.chungnam_policy import (
     fixed_distance_km,
     is_chungnam,
     resolve_special_destination,
+    resolve_special_place,
     support_office_code,
     support_office_label,
 )
@@ -21,29 +22,40 @@ from app.services.price_service import get_energy_price
 
 
 async def resolve_distance(req: TravelRequest) -> DistanceResponse:
-    origin = await geocode(req.origin)
-    special_destination = resolve_special_destination(req.destination)
+    origin_alias = resolve_special_destination(req.origin)
+    destination_alias = resolve_special_destination(req.destination)
+
+    origin_query = origin_alias.canonical_address if origin_alias else req.origin
     destination_query = (
-        special_destination.canonical_address
-        if special_destination
-        else req.destination
+        destination_alias.canonical_address if destination_alias else req.destination
     )
+
+    origin = await geocode(origin_query)
     destination = await geocode(destination_query)
+
+    special_origin = origin_alias or resolve_special_place(req.origin, origin)
+    special_destination = destination_alias or resolve_special_place(
+        req.destination, destination
+    )
 
     origin_is_chungnam = is_chungnam(origin.get("region_1depth_name", ""))
     destination_is_chungnam = is_chungnam(destination.get("region_1depth_name", ""))
-    origin_code = (
-        support_office_code(origin.get("region_2depth_name", ""))
-        if origin_is_chungnam
-        else None
-    )
-    destination_code = (
-        destination_distance_code(
+
+    if origin_is_chungnam:
+        origin_code = (
+            special_origin.code
+            if special_origin
+            else support_office_code(origin.get("region_2depth_name", ""))
+        )
+    else:
+        origin_code = None
+
+    if destination_is_chungnam:
+        destination_code = destination_distance_code(
             destination.get("region_2depth_name", ""), special_destination
         )
-        if destination_is_chungnam
-        else None
-    )
+    else:
+        destination_code = None
 
     fixed_one_way = (
         fixed_distance_km(origin_code, destination_code)
@@ -66,24 +78,27 @@ async def resolve_distance(req: TravelRequest) -> DistanceResponse:
         )
 
     distance_km = one_way_km * (2 if req.round_trip else 1)
+
+    # Fuel-price region must remain the actual administrative location.
+    # A Yesan-side Naepo destination still uses Yesan-gun for Opinet pricing,
+    # while only the fixed-distance code is normalized to NAEPO.
     province = destination.get("region_1depth_name", "")
     sigungu = destination.get("region_2depth_name", "")
-    if special_destination and special_destination.canonical_sigungu:
-        sigungu = special_destination.canonical_sigungu
     if not province or not sigungu:
         raise ValueError("출장지의 시도/시군구를 판별하지 못했습니다.")
 
-    resolved_destination_name = (
-        special_destination.label
-        if special_destination
-        else destination.get("resolved_name")
-    )
+    resolved_origin_name = origin.get("resolved_name")
+    resolved_destination_name = destination.get("resolved_name")
 
     return DistanceResponse(
         distance_km=round(distance_km, 1),
         distance_source=distance_source,
         destination_code=destination_code,
-        origin_support_office=support_office_label(origin_code),
+        origin_support_office=(
+            special_origin.label
+            if special_origin
+            else support_office_label(origin_code)
+        ),
         destination_support_office=(
             special_destination.label
             if special_destination
@@ -92,13 +107,11 @@ async def resolve_distance(req: TravelRequest) -> DistanceResponse:
         distance_cache_hit=distance_cache_hit,
         province=province,
         sigungu=sigungu,
-        resolved_origin_name=origin.get("resolved_name"),
+        resolved_origin_name=resolved_origin_name,
         resolved_origin_address=origin.get("resolved_address") or origin.get("address_name"),
         resolved_destination_name=resolved_destination_name,
         resolved_destination_address=(
-            special_destination.canonical_address
-            if special_destination
-            else destination.get("resolved_address") or destination.get("address_name")
+            destination.get("resolved_address") or destination.get("address_name")
         ),
     )
 
