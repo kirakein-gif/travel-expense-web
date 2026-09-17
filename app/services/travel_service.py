@@ -138,7 +138,7 @@ def _formula(
 
     base = (
         f"{one_way_km:,.1f}km × {unit_price:,.2f}{price_unit} ÷ "
-        f"{efficiency:g}{efficiency_unit} × 2 = {unit_cost:,.0f}원(10원 미만 절사)"
+        f"{efficiency:g}{efficiency_unit} × 2회(왕복) = {unit_cost:,.0f}원(10원 미만 절사)"
     )
 
     if round_trip_count == 1:
