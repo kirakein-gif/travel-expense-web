@@ -88,6 +88,57 @@ async def _request_once(
     return _rows(payload), payload
 
 
+async def check_opinet_api_status() -> dict[str, Any]:
+    """Validate the configured API key without ever returning the secret value."""
+    if not OPINET_API_KEY:
+        return {
+            "configured": False,
+            "valid": False,
+            "auth_mode": None,
+            "area_count": 0,
+            "message": "OPINET_API_KEY가 Cloud Run에 설정되지 않았습니다.",
+        }
+
+    attempts: list[str] = []
+    for auth_name in ("certkey", "code"):
+        try:
+            rows, payload = await _request_once(AREA_CODE_ENDPOINT, auth_name)
+            if rows:
+                sample_names = [
+                    _clean(row.get("AREA_NM"))
+                    for row in rows[:5]
+                    if _clean(row.get("AREA_NM"))
+                ]
+                return {
+                    "configured": True,
+                    "valid": True,
+                    "auth_mode": auth_name,
+                    "area_count": len(rows),
+                    "sample_areas": sample_names,
+                    "message": "오피넷 API 인증 및 지역코드 조회에 성공했습니다.",
+                }
+
+            result = payload.get("RESULT") if isinstance(payload, dict) else None
+            result_text = _clean(result)
+            if len(result_text) > 120:
+                result_text = result_text[:120] + "..."
+            attempts.append(f"{auth_name}: 데이터 없음" + (f" ({result_text})" if result_text else ""))
+        except Exception as exc:
+            text = str(exc)
+            if len(text) > 120:
+                text = text[:120] + "..."
+            attempts.append(f"{auth_name}: {text}")
+
+    return {
+        "configured": True,
+        "valid": False,
+        "auth_mode": None,
+        "area_count": 0,
+        "message": "오피넷 API 인증 시험에 실패했습니다.",
+        "attempts": attempts,
+    }
+
+
 async def _request(endpoint: str, **extra: str) -> list[dict[str, Any]]:
     if not OPINET_API_KEY:
         raise RuntimeError("OPINET_API_KEY가 설정되지 않았습니다.")
@@ -184,8 +235,6 @@ async def get_historical_area_price(
     if cached is not None:
         return {**cached, "cache_hit": True}
 
-    # 어제부터 최근 7일 범위는 최근 지역 API를 우선 사용한다.
-    # 그보다 오래된 일자는 특정 7일 지역 API를 사용한다.
     today = date.today()
     if today - timedelta(days=7) <= travel_date < today:
         endpoint = RECENT_AREA_ENDPOINT
