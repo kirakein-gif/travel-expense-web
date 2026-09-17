@@ -23,6 +23,13 @@ PROVINCE_ALIASES = {
     "경상남도": "경남", "경남": "경남", "제주특별자치도": "제주", "제주": "제주",
 }
 
+# 2026 OPINET added/changed some region labels. Evidence selection therefore uses
+# exact visible labels first instead of depending on historical checkbox numbers.
+REGION_LABELS = [
+    "서울", "부산", "대구", "인천", "전남광주", "대전", "울산", "경기",
+    "강원", "충북", "충남", "전북", "경북", "경남", "제주", "세종", "광주", "전남",
+]
+
 SIDO_IDS = {
     "서울": "chk2_1", "부산": "chk2_2", "대구": "chk2_3", "인천": "chk2_4",
     "광주": "chk2_5", "대전": "chk2_6", "울산": "chk2_7", "경기": "chk2_8",
@@ -63,6 +70,93 @@ def _province_option_candidates(province: str) -> list[str]:
         if short_name == province and long_name not in values:
             values.append(long_name)
     return values
+
+
+async def _find_checkbox_by_exact_label(page: Page, label_text: str):
+    labels = page.locator("label")
+    for i in range(await labels.count()):
+        label = labels.nth(i)
+        text = re.sub(r"\s+", " ", (await label.inner_text()).strip())
+        if text != label_text:
+            continue
+
+        inside = label.locator('input[type="checkbox"]')
+        if await inside.count():
+            return inside.first
+
+        for_attr = await label.get_attribute("for")
+        if for_attr:
+            target = page.locator(f"#{for_attr}")
+            if await target.count():
+                input_type = await target.first.get_attribute("type")
+                if input_type == "checkbox":
+                    return target.first
+    return None
+
+
+async def _select_single_province_checkbox(page: Page, province: str) -> None:
+    """Select exactly one province so OPINET returns the sigungu table.
+
+    OPINET's own help says sigungu averages are shown only when one province is
+    selected. Do not use the styled sido dropdown for this purpose; the result
+    mode is controlled by the province checkboxes above it.
+    """
+    target = await _find_checkbox_by_exact_label(page, province)
+
+    # Uncheck every province checkbox we can identify by its visible label.
+    found_any = False
+    for region_label in REGION_LABELS:
+        checkbox = await _find_checkbox_by_exact_label(page, region_label)
+        if checkbox is None:
+            continue
+        found_any = True
+        try:
+            if await checkbox.is_checked():
+                await checkbox.uncheck(force=True)
+        except Exception:
+            await checkbox.evaluate(
+                """
+                (el) => {
+                    el.checked = false;
+                    el.dispatchEvent(new Event('input', {bubbles:true}));
+                    el.dispatchEvent(new Event('change', {bubbles:true}));
+                }
+                """
+            )
+
+    if target is None:
+        # Historical-ID fallback only when exact label lookup fails.
+        base_id = SIDO_IDS.get(province)
+        candidates = [base_id, f"area_{base_id}" if base_id else None]
+        for element_id in candidates:
+            if not element_id:
+                continue
+            loc = page.locator(f"#{element_id}")
+            if await loc.count():
+                target = loc.first
+                break
+
+    if target is None:
+        raise RuntimeError(f"오피넷 지역 체크박스에서 {province}을(를) 찾지 못했습니다.")
+
+    try:
+        await target.check(force=True)
+    except Exception:
+        await target.evaluate(
+            """
+            (el) => {
+                el.checked = true;
+                el.dispatchEvent(new Event('input', {bubbles:true}));
+                el.dispatchEvent(new Event('change', {bubbles:true}));
+                el.dispatchEvent(new Event('click', {bubbles:true}));
+            }
+            """
+        )
+
+    if not found_any:
+        # Give old pages a moment to synchronize any custom checkbox UI.
+        await page.wait_for_timeout(300)
+    await page.wait_for_timeout(500)
 
 
 async def _select_by_id_or_label(page: Page, element_id: str, label_text: str) -> None:
@@ -114,24 +208,19 @@ async def _select_date(page: Page, target: date) -> None:
 
 
 async def _clear_all_regions(page: Page) -> None:
-    clear_button = page.locator("#btn_ChkAll_Area")
-    if await clear_button.count():
-        await clear_button.click(force=True)
-        return
-    for text in ("전체선택", "전체 선택"):
-        loc = page.get_by_text(text, exact=True)
-        if await loc.count():
-            await loc.first.click(force=True)
-            return
+    # Kept for compatibility with older OPINET pages. New evidence flow uses
+    # _select_single_province_checkbox because the old all-select button toggles.
+    for region_label in REGION_LABELS:
+        checkbox = await _find_checkbox_by_exact_label(page, region_label)
+        if checkbox is not None:
+            try:
+                if await checkbox.is_checked():
+                    await checkbox.uncheck(force=True)
+            except Exception:
+                pass
 
 
 async def _set_hidden_select_by_label(page: Page, selector: str, labels: list[str]) -> bool:
-    """Set a select even when OPINET keeps the native control hidden.
-
-    OPINET decorates some select boxes and hides the original <select>. Playwright's
-    select_option waits for visibility, so use DOM JavaScript and dispatch the same
-    events the page listens for.
-    """
     locator = page.locator(selector)
     if not await locator.count():
         return False
@@ -146,7 +235,6 @@ async def _set_hidden_select_by_label(page: Page, selector: str, labels: list[st
                 || options.find((o) => wanted.includes(norm(o.label)))
                 || options.find((o) => wanted.includes(norm(o.value)));
             if (!option) return null;
-
             select.value = option.value;
             option.selected = true;
             select.dispatchEvent(new Event('input', { bubbles: true }));
@@ -160,15 +248,11 @@ async def _set_hidden_select_by_label(page: Page, selector: str, labels: list[st
 
 
 async def _select_province_dropdown(page: Page, province: str) -> None:
-    """Select OPINET province drill-down, including hidden native selects."""
     candidates = _province_option_candidates(province)
-
-    # Current OPINET uses this hidden native select behind a styled control.
     if await _set_hidden_select_by_label(page, "#sido_cd", candidates):
         await page.wait_for_timeout(1200)
         return
 
-    # Fallback for future DOM changes: inspect every select and set via JS.
     selects = page.locator("select")
     for si in range(await selects.count()):
         select = selects.nth(si)
@@ -176,16 +260,12 @@ async def _select_province_dropdown(page: Page, province: str) -> None:
         option_count = await options.count()
         if option_count < 2:
             continue
-
         texts = [
             re.sub(r"\s+", " ", (await options.nth(oi).inner_text()).strip())
             for oi in range(option_count)
         ]
         if not any(candidate in texts for candidate in candidates):
             continue
-
-        selector = f"select:nth-of-type({si + 1})"
-        # nth-of-type can differ across parents, so evaluate the locator directly.
         result = await select.evaluate(
             """
             (el, labels) => {
@@ -207,7 +287,6 @@ async def _select_province_dropdown(page: Page, province: str) -> None:
         if result:
             await page.wait_for_timeout(1200)
             return
-
     raise RuntimeError(f"오피넷 시도 선택 드롭다운에서 {province}을(를) 찾지 못했습니다.")
 
 
@@ -284,7 +363,7 @@ async def _extract_region_price_table(page: Page, product_label: str) -> dict[st
 async def _prepare_oil_page(page: Page, travel_date: date, province: str, vehicle_type: str) -> None:
     await page.goto(OIL_URL, wait_until="networkidle", timeout=60_000)
     await _select_date(page, travel_date)
-    await _select_province_dropdown(page, province)
+    await _select_single_province_checkbox(page, province)
 
     try:
         await _select_by_id_or_label(page, PRODUCT_IDS[vehicle_type], PRODUCT_LABELS[vehicle_type])
@@ -297,19 +376,7 @@ async def _prepare_oil_page(page: Page, travel_date: date, province: str, vehicl
 async def _prepare_lpg_page(page: Page, travel_date: date, province: str) -> None:
     await page.goto(LPG_URL, wait_until="networkidle", timeout=60_000)
     await _select_date(page, travel_date)
-
-    try:
-        await _select_province_dropdown(page, province)
-    except Exception:
-        await _clear_all_regions(page)
-        base_id = SIDO_IDS.get(province)
-        if not base_id:
-            raise ValueError(f"지원하지 않는 시도입니다: {province}")
-        try:
-            await _select_by_id_or_label(page, f"area_{base_id}", province)
-        except Exception:
-            await _select_by_id_or_label(page, base_id, province)
-
+    await _select_single_province_checkbox(page, province)
     await _click_search(page)
 
 
