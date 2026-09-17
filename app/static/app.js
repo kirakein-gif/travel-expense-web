@@ -46,6 +46,7 @@ function clearPriceReview(){
   lastPayload=null; lastEvidencePayload=null;
   $("pdfButton").disabled=true; $("evidenceButton").disabled=true; $("tab2check").textContent="";
   resetCalcFields();
+  $("outputActions").classList.add("hidden");
   setResultState(lastDistance?"거리 확인 완료":"입력 대기",lastDistance?"partial":"");
 }
 function clearDistanceReview(){
@@ -228,7 +229,7 @@ $("calculateButton").addEventListener("click",async()=>{
     const spec=currentVehicleSpec(),canEvidence=spec.evidence&&data.energy_price!=null&&!payload.public_vehicle&&data.evidence_status!=="manual_price";
     if(canEvidence){lastEvidencePayload={travel_date:payload.travel_date,vehicle_type:spec.evidence,province:lastDistance.province,sigungu:lastDistance.sigungu,expected_price:data.energy_price};$("evidenceButton").disabled=false;$("evidence").textContent="API 가격 확인 · 증빙 생성 대기";}
     else{lastEvidencePayload=null;$("evidenceButton").disabled=true;$("evidence").textContent=data.evidence_status;}
-    $("pdfButton").disabled=false;$("tab2check").textContent="✓";setResultState("최종 산출 완료","done");
+    $("pdfButton").disabled=false;$("outputActions").classList.remove("hidden");$("tab2check").textContent="✓";setResultState("최종 산출 완료","done");
     $("globalStatus").textContent="여비 계산 완료 · 오른쪽 최종 산출을 확인하고 왼쪽에서 증빙 또는 PDF를 생성하세요.";
   }catch(e){$("globalStatus").textContent=e.message;}finally{$("calculateButton").disabled=false;}
 });
