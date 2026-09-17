@@ -122,7 +122,9 @@ async def check_opinet_api_status() -> dict[str, Any]:
             result_text = _clean(result)
             if len(result_text) > 120:
                 result_text = result_text[:120] + "..."
-            attempts.append(f"{auth_name}: 데이터 없음" + (f" ({result_text})" if result_text else ""))
+            attempts.append(
+                f"{auth_name}: 데이터 없음" + (f" ({result_text})" if result_text else "")
+            )
         except Exception as exc:
             text = str(exc)
             if len(text) > 120:
@@ -143,24 +145,40 @@ async def _request(endpoint: str, **extra: str) -> list[dict[str, Any]]:
     if not OPINET_API_KEY:
         raise RuntimeError("OPINET_API_KEY가 설정되지 않았습니다.")
 
-    # 현재 오피넷 일반 API 공식 문서는 certkey를 사용한다.
-    rows, payload = await _request_once(endpoint, "certkey", **extra)
-    if rows:
-        return rows
+    # OPINET keys differ by issuance/API generation. The diagnostic endpoint
+    # proved that this deployment's key authenticates with `code`, while some
+    # current documentation/examples use `certkey`. Try both safely for every
+    # endpoint so the real lookup path matches the validated credential mode.
+    last_payload: dict[str, Any] = {}
+    attempt_notes: list[str] = []
 
-    # 과거 통계 API의 예전 예제에는 code 파라미터가 사용된 적이 있어
-    # 통계 엔드포인트에 한해서만 1회 호환 재시도를 한다.
-    if endpoint in {RECENT_AREA_ENDPOINT, DATE_AREA_ENDPOINT}:
-        legacy_rows, legacy_payload = await _request_once(endpoint, "code", **extra)
-        if legacy_rows:
-            return legacy_rows
-        payload = legacy_payload or payload
+    for auth_name in ("certkey", "code"):
+        try:
+            rows, payload = await _request_once(endpoint, auth_name, **extra)
+            if rows:
+                return rows
+            last_payload = payload or last_payload
+            result = payload.get("RESULT") if isinstance(payload, dict) else None
+            result_text = _clean(result)
+            if len(result_text) > 120:
+                result_text = result_text[:120] + "..."
+            attempt_notes.append(
+                f"{auth_name}: 데이터 없음" + (f" ({result_text})" if result_text else "")
+            )
+        except Exception as exc:
+            text = str(exc)
+            if len(text) > 120:
+                text = text[:120] + "..."
+            attempt_notes.append(f"{auth_name}: {text}")
 
-    result = payload.get("RESULT") if isinstance(payload, dict) else None
+    result = last_payload.get("RESULT") if isinstance(last_payload, dict) else None
     result_text = _clean(result)
     if len(result_text) > 180:
         result_text = result_text[:180] + "..."
     suffix = f" 응답: {result_text}" if result_text else ""
+    attempts = "; ".join(attempt_notes)
+    if attempts:
+        suffix += f" / 인증시도: {attempts}"
     raise RuntimeError(f"오피넷 {endpoint} 응답에 데이터가 없습니다.{suffix}")
 
 
