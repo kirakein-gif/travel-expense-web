@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from app.models import (
     DistanceResponse,
     EstimateResponse,
@@ -26,6 +29,10 @@ from app.services.travel_policy import (
     transport_distance,
     trip_days,
 )
+
+
+def _seoul_today():
+    return datetime.now(ZoneInfo("Asia/Seoul")).date()
 
 
 async def resolve_distance(req: TravelRequest) -> DistanceResponse:
@@ -197,14 +204,30 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         amount = 0
         formula = "공용차량 이용: 자가용 자동차운임 지급하지 않음"
     else:
-        # 유가 기준일은 출장 시작일이다. 오피넷 당일 일평균 가격은 price_service에서 방어한다.
-        price_result = await get_energy_price(
-            req.travel_date,
-            req.vehicle_type,
-            req.province,
-            req.sigungu,
-            req.phev_energy_source,
-        )
+        today = _seoul_today()
+        if req.travel_date > today and spec.price_vehicle_type in {"gasoline", "diesel", "lpg"}:
+            raise ValueError("미래 날짜의 오피넷 유가는 조회할 수 없습니다.")
+
+        if req.travel_date == today and spec.price_vehicle_type in {"gasoline", "diesel", "lpg"}:
+            if req.manual_energy_price is None:
+                raise ValueError(
+                    "오피넷 당일 지역별 일평균 유가는 아직 제공되지 않습니다. "
+                    "당일 출장신청은 적용 유가를 직접 입력해주세요."
+                )
+            price_result = {
+                "price": float(req.manual_energy_price),
+                "source": "사용자 수동입력 · 오피넷 당일 일평균 미제공",
+                "evidence_status": "manual_price",
+                "cache_hit": False,
+            }
+        else:
+            price_result = await get_energy_price(
+                req.travel_date,
+                req.vehicle_type,
+                req.province,
+                req.sigungu,
+                req.phev_energy_source,
+            )
 
         if price_result["price"] is not None:
             unit_cost, amount = calculate_repeated_transport_cost(
@@ -273,6 +296,7 @@ async def estimate_travel(req: TravelRequest) -> EstimateResponse:
             vehicle_type=req.vehicle_type,
             phev_energy_source=req.phev_energy_source,
             efficiency=req.efficiency,
+            manual_energy_price=req.manual_energy_price,
             distance_km=distance.distance_km,
             one_way_distance_km=distance.one_way_distance_km,
             round_trip=req.round_trip,
