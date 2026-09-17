@@ -38,7 +38,6 @@ async def _get_browser_price(
     province_name: str,
     sigungu_name: str,
 ) -> dict:
-    # v3 is kept separate from caches created by earlier OPINET DOM strategies.
     cache_key = f"v3|{travel_date.isoformat()}|{province_name}|{vehicle_type}"
 
     async def factory() -> dict:
@@ -80,7 +79,9 @@ async def get_energy_price(
     sigungu_name: str,
 ) -> dict:
     if vehicle_type in {"gasoline", "diesel", "lpg"}:
-        api_error = None
+        # 운영환경에서는 API가 가격 계산의 주 경로다. API가 실패했을 때
+        # 사용자를 20~30초 더 기다리게 하지 않고 즉시 원인을 보여준다.
+        # 웹 브라우저 조회/캡처는 별도의 증빙 단계로 분리한다.
         if OPINET_API_KEY:
             try:
                 api_result = await get_historical_area_price(
@@ -89,30 +90,25 @@ async def get_energy_price(
                     sigungu_name=sigungu_name,
                     vehicle_type=vehicle_type,
                 )
-                return {
-                    "price": api_result["price"],
-                    "source": "한국석유공사 오피넷 API",
-                    "source_url": api_result.get("source_url"),
-                    "evidence_status": "api_price_ready",
-                    "evidence_path": None,
-                    "cache_hit": bool(api_result.get("cache_hit")),
-                }
             except Exception as exc:
-                api_error = str(exc)
+                raise RuntimeError(f"오피넷 API 조회 실패: {exc}") from exc
 
-        try:
-            return await _get_browser_price(
-                travel_date,
-                vehicle_type,
-                province_name,
-                sigungu_name,
-            )
-        except Exception as browser_exc:
-            if api_error:
-                raise RuntimeError(
-                    f"오피넷 API 조회 실패: {api_error} / 웹 증빙 조회 실패: {browser_exc}"
-                ) from browser_exc
-            raise
+            return {
+                "price": api_result["price"],
+                "source": "한국석유공사 오피넷 API",
+                "source_url": api_result.get("source_url"),
+                "evidence_status": "api_price_ready",
+                "evidence_path": None,
+                "cache_hit": bool(api_result.get("cache_hit")),
+            }
+
+        # API 키가 없는 로컬 개발환경에서만 웹 조회를 임시 fallback으로 사용한다.
+        return await _get_browser_price(
+            travel_date,
+            vehicle_type,
+            province_name,
+            sigungu_name,
+        )
 
     if vehicle_type == "electric":
         return {
