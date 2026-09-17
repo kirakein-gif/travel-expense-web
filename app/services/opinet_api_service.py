@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
@@ -11,6 +11,7 @@ from app.config import OPINET_API_KEY
 from app.services.cache_service import cache
 
 API_BASE = "https://www.opinet.co.kr/api"
+RECENT_AREA_ENDPOINT = "areaAvgRecentPrice.do"
 DATE_AREA_ENDPOINT = "dateAreaAvgRecentPrice.do"
 AREA_CODE_ENDPOINT = "areaCode.do"
 
@@ -64,15 +65,12 @@ def _province_short(name: str) -> str:
     return name
 
 
-async def _request(endpoint: str, **extra: str) -> list[dict[str, Any]]:
-    if not OPINET_API_KEY:
-        raise RuntimeError("OPINET_API_KEY가 설정되지 않았습니다.")
-
-    params = {"out": "json"}
-    if endpoint == AREA_CODE_ENDPOINT:
-        params["certkey"] = OPINET_API_KEY
-    else:
-        params["code"] = OPINET_API_KEY
+async def _request_once(
+    endpoint: str,
+    auth_name: str,
+    **extra: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    params = {"out": "json", auth_name: OPINET_API_KEY}
     params.update({key: value for key, value in extra.items() if value})
 
     async with httpx.AsyncClient(timeout=20) as client:
@@ -81,12 +79,38 @@ async def _request(endpoint: str, **extra: str) -> list[dict[str, Any]]:
         try:
             payload = json.loads(response.text, strict=False)
         except ValueError as exc:
-            raise RuntimeError("오피넷 API가 JSON 응답을 반환하지 않았습니다. API 키를 확인해주세요.") from exc
+            raise RuntimeError(
+                f"오피넷 {endpoint}가 JSON 응답을 반환하지 않았습니다. API 키를 확인해주세요."
+            ) from exc
 
-    rows = _rows(payload)
-    if not rows:
-        raise RuntimeError("오피넷 API 응답에 가격 데이터가 없습니다.")
-    return rows
+    if not isinstance(payload, dict):
+        return [], {}
+    return _rows(payload), payload
+
+
+async def _request(endpoint: str, **extra: str) -> list[dict[str, Any]]:
+    if not OPINET_API_KEY:
+        raise RuntimeError("OPINET_API_KEY가 설정되지 않았습니다.")
+
+    # 현재 오피넷 일반 API 공식 문서는 certkey를 사용한다.
+    rows, payload = await _request_once(endpoint, "certkey", **extra)
+    if rows:
+        return rows
+
+    # 과거 통계 API의 예전 예제에는 code 파라미터가 사용된 적이 있어
+    # 통계 엔드포인트에 한해서만 1회 호환 재시도를 한다.
+    if endpoint in {RECENT_AREA_ENDPOINT, DATE_AREA_ENDPOINT}:
+        legacy_rows, legacy_payload = await _request_once(endpoint, "code", **extra)
+        if legacy_rows:
+            return legacy_rows
+        payload = legacy_payload or payload
+
+    result = payload.get("RESULT") if isinstance(payload, dict) else None
+    result_text = _clean(result)
+    if len(result_text) > 180:
+        result_text = result_text[:180] + "..."
+    suffix = f" 응답: {result_text}" if result_text else ""
+    raise RuntimeError(f"오피넷 {endpoint} 응답에 데이터가 없습니다.{suffix}")
 
 
 def _name_matches(api_name: str, target: str) -> bool:
@@ -130,8 +154,17 @@ async def _resolve_area_code(province_name: str, sigungu_name: str) -> str:
             f"오피넷 지역코드에서 {sigungu_name}을(를) 찾지 못했습니다. 조회 지역 예: {sample}"
         )
 
-    value, _ = await cache.get_or_create("opinet_area_code", cache_key, factory, ttl_seconds=None)
+    value, _ = await cache.get_or_create(
+        "opinet_area_code",
+        cache_key,
+        factory,
+        ttl_seconds=None,
+    )
     return str(value)
+
+
+def _row_date(row: dict[str, Any]) -> str:
+    return _clean(row.get("DATE") or row.get("TRADE_DT"))
 
 
 async def get_historical_area_price(
@@ -151,18 +184,29 @@ async def get_historical_area_price(
     if cached is not None:
         return {**cached, "cache_hit": True}
 
+    # 어제부터 최근 7일 범위는 최근 지역 API를 우선 사용한다.
+    # 그보다 오래된 일자는 특정 7일 지역 API를 사용한다.
+    today = date.today()
+    if today - timedelta(days=7) <= travel_date < today:
+        endpoint = RECENT_AREA_ENDPOINT
+    else:
+        endpoint = DATE_AREA_ENDPOINT
+
     rows = await _request(
-        DATE_AREA_ENDPOINT,
+        endpoint,
         area=area_code,
         date=travel_date.strftime("%Y%m%d"),
         prodcd=product_code,
     )
 
     target_value = None
+    available_dates: list[str] = []
     for row in rows:
-        row_date = _clean(row.get("DATE") or row.get("TRADE_DT"))
+        row_date = _row_date(row)
         row_product = _clean(row.get("PRODCD"))
         raw_price = row.get("PRICE")
+        if row_date:
+            available_dates.append(row_date)
         if len(row_date) != 8 or raw_price in (None, ""):
             continue
         if row_product and row_product != product_code:
@@ -173,9 +217,10 @@ async def get_historical_area_price(
             value = {
                 "price": float(raw_price),
                 "source": "한국석유공사 오피넷 API",
-                "source_url": f"{API_BASE}/{DATE_AREA_ENDPOINT}",
+                "source_url": f"{API_BASE}/{endpoint}",
                 "area_code": area_code,
                 "api_date": row_iso,
+                "endpoint": endpoint,
             }
             await cache.set(
                 "opinet_api_price",
@@ -189,13 +234,9 @@ async def get_historical_area_price(
             continue
 
     if target_value is None:
-        available = sorted(
-            _clean(row.get("DATE") or row.get("TRADE_DT"))
-            for row in rows
-            if row.get("DATE") or row.get("TRADE_DT")
-        )
+        available = ", ".join(sorted(set(available_dates))[:10]) or "없음"
         raise RuntimeError(
-            f"오피넷 API 응답에 {travel_date.isoformat()} 가격이 없습니다. 반환일자: {', '.join(available[:10])}"
+            f"오피넷 {endpoint} 응답에 {travel_date.isoformat()} 가격이 없습니다. 반환일자: {available}"
         )
 
     return {**target_value, "cache_hit": False}
