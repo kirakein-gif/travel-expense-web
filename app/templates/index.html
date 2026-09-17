@@ -14,7 +14,7 @@
       <h1>여비정산 자동화</h1>
       <p class="sub">거리와 여비 규칙을 단계별로 확인한 뒤 증빙과 PDF를 만듭니다.</p>
     </div>
-    <div class="badge">v1.0 REVIEW FLOW</div>
+    <div class="badge">v1.1 SAME-DAY</div>
   </section>
 
   <nav class="tabs" aria-label="여비정산 단계">
@@ -112,15 +112,22 @@
             <span class="help">예: 3일 교육 중 일부만 숙박하여 총 2번 왕복하면 2를 입력합니다.</span>
           </label>
           <div id="trainingTripHint" class="inline-note"></div>
-
           <label>교육훈련기관 식비 청구 횟수
             <select id="training_meal_claim_count"></select>
-            <span class="help">청구된 식사 1식마다 1일 식비의 1/3을 감액합니다. 출장일수에 따라 선택 가능한 횟수가 자동으로 늘어납니다.</span>
+            <span class="help">청구된 식사 1식마다 1일 식비의 1/3을 감액합니다.</span>
           </label>
         </div>
 
         <label class="check"><input id="public_vehicle" type="checkbox">공용차량 이용</label>
         <span class="help standalone">공용차량 사용 시 일비는 50% 감액하고 자가용 자동차운임은 지급하지 않는 것으로 계산합니다.</span>
+
+        <div id="manualPriceWrap" class="hidden">
+          <div class="section-label">당일 출장 유가</div>
+          <label>적용 유가 직접 입력 (원/L)
+            <input id="manual_energy_price" type="number" min="0.01" step="0.01" placeholder="예: 1860.58">
+            <span class="help">오피넷 당일 지역별 일평균 유가는 아직 제공되지 않으므로 당일 출장신청은 적용 유가를 직접 입력합니다. PDF에는 수동입력으로 표시됩니다.</span>
+          </label>
+        </div>
 
         <div class="section-label">직접 입력 비용</div>
         <div class="two">
@@ -144,15 +151,19 @@
       </section>
 
       <section class="card result compact-result">
-        <h2>적용 규칙 미리보기</h2>
+        <h2>계산 결과 확인</h2>
+        <div class="hint">여비 계산 후 이 자리에서 값을 확인한 다음 결과·증빙 단계로 이동합니다.</div>
         <dl>
           <div><dt>출장일수</dt><dd id="preview_days">-</dd></div>
           <div><dt>출장유형</dt><dd id="preview_type">-</dd></div>
           <div><dt>예상 왕복횟수</dt><dd id="preview_round_trips">-</dd></div>
           <div><dt>차량·연비</dt><dd id="preview_vehicle">-</dd></div>
           <div><dt>유가 기준</dt><dd id="preview_fuel_date">첫째 날</dd></div>
-          <div><dt>일비 기준</dt><dd id="preview_daily">-</dd></div>
-          <div><dt>식비 기준</dt><dd id="preview_meal">-</dd></div>
+          <div><dt>자동차운임 산식</dt><dd id="review_formula" class="formula">-</dd></div>
+          <div><dt>자동차운임</dt><dd id="review_transport">-</dd></div>
+          <div><dt>일비</dt><dd id="review_daily">-</dd></div>
+          <div><dt>식비</dt><dd id="review_meal">-</dd></div>
+          <div><dt>합계</dt><dd id="review_total" class="total">-</dd></div>
         </dl>
       </section>
     </div>
@@ -188,7 +199,7 @@
 
       <section class="card">
         <h2>증빙·출력</h2>
-        <div class="hint">PDF는 양면 출력용 2페이지로 생성됩니다. 1쪽에는 여비신청서와 산출내역, 2쪽에는 거리·유가 산출근거와 오피넷 증빙을 배치합니다.</div>
+        <div class="hint">PDF는 양면 출력용 2페이지로 생성됩니다. 과거 유가는 오피넷 증빙을 첨부하고, 당일 수동 유가는 수동입력 사실을 명시합니다.</div>
         <button id="evidenceButton" type="button" disabled class="teal">오피넷 증빙만 생성</button>
         <button id="pdfButton" type="button" disabled class="dark">2페이지 여비신청서 PDF</button>
         <button class="secondary full" data-go="2" type="button">여비 상세로 돌아가기</button>
