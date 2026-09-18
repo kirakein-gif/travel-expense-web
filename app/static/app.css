@@ -179,10 +179,22 @@ textarea{min-height:104px;resize:vertical;line-height:1.6}
 .standalone{margin:-4px 0 12px}
 .check{display:flex;align-items:center;gap:9px;font-size:15px}
 .check input{width:18px;height:18px;min-height:0;margin:0}
+.check-with-note{margin:2px 0 10px;flex-wrap:wrap}
+.check-inline-note{
+  margin-left:4px;color:#5b6f87;font-size:13px;font-weight:600;
+  white-space:nowrap
+}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:15px}
 .section-label{
   font-size:14px;font-weight:850;letter-spacing:.02em;color:#245fd1;
   margin:18px 0 10px;padding-top:13px;border-top:1px solid #e6edf5
+}
+.section-label-inline{
+  display:flex;align-items:center;justify-content:space-between;gap:12px
+}
+.section-inline-note{
+  color:#5b6f87;font-size:13px;font-weight:650;letter-spacing:0;
+  white-space:nowrap
 }
 .hidden{display:none!important}
 
@@ -333,4 +345,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:780px){
   .result-actions{grid-template-columns:1fr}
   .result-block summary span{white-space:normal}
+}
+
+@media(max-width:780px){
+  .section-label-inline{align-items:flex-start;flex-direction:column;gap:3px}
+  .section-inline-note,.check-inline-note{white-space:normal}
+  .check-inline-note{width:100%;margin-left:27px}
 }
