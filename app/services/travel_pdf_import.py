@@ -9,6 +9,7 @@ from pypdf import PdfReader
 
 _DATE_START_RE = re.compile(r"(20\d{2})[.\-/](\d{1,2})[.\-/](\d{1,2})\s*부터")
 _DATE_END_RE = re.compile(r"(20\d{2})[.\-/](\d{1,2})[.\-/](\d{1,2})\s*까지")
+_DATE_ONLY_RE = re.compile(r"^(20\d{2})[.\-/](\d{1,2})[.\-/](\d{1,2})$")
 _TIME_RE = re.compile(r"(\d{1,2}:\d{2})\s*[~～-]\s*(\d{1,2}:\d{2})")
 
 
@@ -74,21 +75,64 @@ def _ranges(doc_type: str) -> list[tuple[float, float]]:
     return [(-1e9, 100), (100, 160), (160, 285), (285, 390), (390, 465), (465, 1e9)]
 
 
+def _period_date_markers(
+    chunks: list[dict[str, Any]],
+    period_range: tuple[float, float],
+    marker: str,
+    direct_re: re.Pattern[str],
+) -> list[dict[str, Any]]:
+    """Find period anchors even when a PDF splits 'YYYY.MM.DD' and '부터/까지'.
+
+    Some NEIS/approval PDFs visually render one cell as '2026.08.27부터' but
+    internally store the date and marker as separate text objects. Treat a date
+    and a nearby marker on the same baseline as one logical anchor.
+    """
+    in_period = [c for c in chunks if period_range[0] <= c["x"] < period_range[1]]
+    found = [c for c in in_period if direct_re.search(c["text"])]
+
+    date_chunks = [c for c in in_period if _DATE_ONLY_RE.fullmatch(c["text"])]
+    marker_chunks = [c for c in in_period if c["text"].strip() == marker]
+
+    for date_chunk in date_chunks:
+        nearby = [
+            m
+            for m in marker_chunks
+            if abs(m["y"] - date_chunk["y"]) <= 3.5
+            and -5 <= (m["x"] - date_chunk["x"]) <= 95
+        ]
+        if not nearby:
+            continue
+        nearest = min(
+            nearby,
+            key=lambda m: (abs(m["y"] - date_chunk["y"]), abs(m["x"] - date_chunk["x"])),
+        )
+        found.append(
+            {
+                "x": date_chunk["x"],
+                "y": date_chunk["y"],
+                "text": f'{date_chunk["text"]}{marker}',
+                "_paired_marker": nearest,
+            }
+        )
+
+    # A direct combined text object and a reconstructed pair can describe the
+    # same visual row. Keep one anchor per baseline.
+    found.sort(key=lambda c: -c["y"])
+    unique: list[dict[str, Any]] = []
+    for item in found:
+        if any(abs(item["y"] - prior["y"]) <= 1.0 for prior in unique):
+            continue
+        unique.append(item)
+    return unique
+
+
 def _records_from_page(page, page_number: int, doc_type: str) -> list[dict[str, Any]]:
     chunks = _page_chunks(page)
     ranges = _ranges(doc_type)
     period_range = ranges[3]
 
-    starts = [
-        c
-        for c in chunks
-        if period_range[0] <= c["x"] < period_range[1] and _DATE_START_RE.search(c["text"])
-    ]
-    ends = [
-        c
-        for c in chunks
-        if period_range[0] <= c["x"] < period_range[1] and _DATE_END_RE.search(c["text"])
-    ]
+    starts = _period_date_markers(chunks, period_range, "부터", _DATE_START_RE)
+    ends = _period_date_markers(chunks, period_range, "까지", _DATE_END_RE)
     starts.sort(key=lambda c: -c["y"])
 
     rows: list[dict[str, Any]] = []
