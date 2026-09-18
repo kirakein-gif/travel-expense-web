@@ -170,7 +170,7 @@ async def generate_estimate_pdf(
       <h2>여비 산출내역</h2>
       <table>
         <tr><th>항목</th><th>산출근거</th><th style="width:24%">금액</th></tr>
-        <tr><td>자동차운임</td><td>{_e(result.calculation_formula)}</td><td class="money">{_won(result.estimated_transport_cost)}</td></tr>
+        <tr><td>운임</td><td>{_e(result.calculation_formula)}</td><td class="money">{_won(result.estimated_transport_cost)}</td></tr>
         <tr><td>일비</td><td>{_e(result.daily_note)}</td><td class="money">{_won(result.daily_allowance)}</td></tr>
         <tr><td>식비</td><td>{_e(result.meal_note)}</td><td class="money">{_won(result.meal_allowance)}</td></tr>
         <tr><td>통행료</td><td>직접 입력</td><td class="money">{_won(result.toll_fee)}</td></tr>
@@ -181,7 +181,7 @@ async def generate_estimate_pdf(
     </div>
 
     <div class="section">
-      <h2>자동차운임 계산 확인</h2>
+      <h2>운임 계산 확인</h2>
       <div class="formula">
         편도 기준거리 {_num(result.one_way_distance_km)} km / 왕복횟수 {round_trips}<br>
         {_e(result.calculation_formula)}<br>
@@ -208,7 +208,7 @@ async def generate_estimate_pdf(
         편도 {_num(result.one_way_distance_km)} km / 적용거리 {_num(result.transport_distance_km)} km
       </div>
       <div class="basis">
-        <b>유가 및 자동차운임</b><br>
+        <b>유가 및 운임</b><br>
         {_e(price_date)} / {_won(result.energy_price)}<br>
         {_e(result.calculation_formula)}
       </div>
@@ -333,7 +333,7 @@ def _regulation_movement_rows(
         )
     else:
         raw_leg_cost = 0
-        calculation_basis = result.calculation_formula or "자동차운임 미지급"
+        calculation_basis = result.calculation_formula or "운임 미지급"
 
     rows: list[dict] = []
 
@@ -454,6 +454,7 @@ async def generate_regulation_pdf(
     )
     movement_count = len(movement_rows)
     dense_class = " dense" if movement_count > 8 else ""
+    compact_page_class = " compact-page" if movement_count >= 6 or len(passenger_names) >= 2 else ""
 
     if evidence_uri:
         evidence_block = f'<img class="evidence-img" src="{evidence_uri}" alt="오피넷 증빙">'
@@ -553,6 +554,56 @@ async def generate_regulation_pdf(
     max-width: 82%;
   }}
   .passenger-sign {{ white-space: nowrap; }}
+
+  /* 3일 교육훈련·동승자 등 자주 쓰는 경우에도 1쪽 안에 서명까지 유지 */
+  .compact-page h1 {{ margin-bottom: 2.5mm; font-size: 23px; }}
+  .compact-page .form-note {{ margin-bottom: 1mm; }}
+  .compact-page th, .compact-page td {{
+    padding-top: 1.35mm;
+    padding-bottom: 1.35mm;
+    line-height: 1.32;
+  }}
+  .compact-page .section-title {{ margin: 2.4mm 0 .9mm; }}
+  .compact-page .move-table {{ margin-top: 1.2mm !important; }}
+  .compact-page .move-table td,
+  .compact-page .move-table th {{
+    padding-top: .95mm;
+    padding-bottom: .95mm;
+  }}
+  .compact-page .calc-basis {{ font-size: 10.9px; }}
+  .compact-page .move-note {{
+    margin-top: .6mm;
+    font-size: 9.8px;
+    line-height: 1.25;
+  }}
+  .compact-page .basis {{ font-size: 11px; }}
+  .compact-page .declaration {{
+    margin-top: 2.2mm;
+    line-height: 1.5;
+    font-size: 11.4px;
+  }}
+  .compact-page .attachment {{
+    margin-top: .8mm;
+    font-size: 10.7px;
+  }}
+  .compact-page .application-date {{
+    margin-top: 1.3mm;
+    font-size: 11.5px;
+  }}
+  .compact-page .signature-block {{
+    margin-top: 1mm;
+    font-size: 11.5px;
+  }}
+  .compact-page .sign-row,
+  .compact-page .co-sign-row {{
+    min-height: 4.2mm;
+  }}
+  .compact-page .co-sign-row {{ padding-top: 0; }}
+  .compact-page .passenger-signs {{
+    gap: .5mm 4mm;
+    max-width: 86%;
+  }}
+
   .page2-title {{ margin-bottom: 4mm; }}
   .page2-head {{
     display: grid;
@@ -597,8 +648,8 @@ async def generate_regulation_pdf(
 </style>
 </head>
 <body>
-  <section class="page break">
-    <div class="form-note">(여비 신청 서식 · 자동차운임 중심 간소형)</div>
+  <section class="page break{compact_page_class}">
+    <div class="form-note">(여비 신청 서식 · 운임 중심 간소형)</div>
     <h1>국내출장 여비 신청서</h1>
 
     <table class="top">
@@ -697,7 +748,7 @@ async def generate_regulation_pdf(
         <th>산출근거</th><td colspan="5" class="basis">{_e(result.meal_note)}</td>
       </tr>
       <tr>
-        <th>자동차운임</th>
+        <th>운임</th>
         <th>연료비</th><td class="money">{_won(result.estimated_transport_cost)}</td>
         <th>통행료</th><td class="money">{_won(result.toll_fee)}</td>
         <th>주차료</th><td class="money">{_won(result.parking_fee)}</td>
@@ -736,7 +787,7 @@ async def generate_regulation_pdf(
         편도 {_num(result.one_way_distance_km)} km / 적용거리 {_num(result.transport_distance_km)} km
       </div>
       <div class="evidence-basis">
-        <b>유가 및 자동차운임</b><br>
+        <b>유가 및 운임</b><br>
         기준일 {_e(price_date)} / {_won_exact(result.energy_price)}<br>
         {_e(result.calculation_formula)}
       </div>
