@@ -455,20 +455,20 @@ $("regulationPdfButton").addEventListener("click",async()=>{
   if(!lastPayload)return;
   $("regulationPdfButton").disabled=true;
   const old=$("regulationPdfButton").textContent;
-  $("regulationPdfButton").textContent="규정서식 생성 중...";
+  $("regulationPdfButton").textContent="여비신청서 생성 중...";
   try{
     const current=basePayload();
     const cachedEvidence=await evidenceForPdf();
     const pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,passengers:current.passengers,purpose:current.purpose,manual_energy_price:current.manual_energy_price,evidence_image_base64:cachedEvidence};
-    $("globalStatus").textContent=cachedEvidence?"준비된 오피넷 증빙을 재사용하여 규정서식 생성 중...":"규정서식 PDF 생성 중...";
+    $("globalStatus").textContent=cachedEvidence?"준비된 오피넷 증빙을 재사용하여 여비신청서 생성 중...":"여비신청서 생성 중...";
     const response=await fetch("/api/report-regulation.pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pdfPayload)});
-    if(!response.ok){const d=await response.json();throw new Error(d.detail||"규정서식 PDF 생성 실패");}
+    if(!response.ok){const d=await response.json();throw new Error(d.detail||"여비신청서 생성 실패");}
     const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
     a.href=url;
-    a.download="규정서식_여비신청서_"+pdfPayload.travel_date+".pdf";
+    a.download="여비신청서_"+pdfPayload.travel_date+".pdf";
     a.click();
     setTimeout(()=>URL.revokeObjectURL(url),1000);
-    $("globalStatus").textContent=cachedEvidence?"규정서식 생성 완료 · 오피넷 증빙 재사용":"규정서식 PDF 생성 완료";
+    $("globalStatus").textContent=cachedEvidence?"여비신청서 생성 완료 · 오피넷 증빙 재사용":"여비신청서 생성 완료";
   }catch(e){
     $("globalStatus").textContent=e.message;
   }finally{
