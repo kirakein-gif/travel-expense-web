@@ -47,7 +47,8 @@ function clearPriceReview(){
   $("pdfButton").disabled=true; $("evidenceButton").disabled=true; $("tab2check").textContent="";
   resetCalcFields();
   $("outputActions").classList.add("hidden");
-  setResultState(lastDistance?"거리 확인 완료":"입력 대기",lastDistance?"partial":"");
+  if(lastDistance && !lastDistance.outside_travel_eligible) setResultState("관외 대상 아님","blocked");
+  else setResultState(lastDistance?"거리 확인 완료":"입력 대기",lastDistance?"partial":"");
 }
 function clearDistanceReview(){
   lastDistance=null; $("distanceNextButton").disabled=true; $("step2Button").disabled=true; $("tab1check").textContent="";
