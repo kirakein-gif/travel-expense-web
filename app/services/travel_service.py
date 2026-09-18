@@ -217,7 +217,7 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
     if training_inside:
         price_result = {
             "price": None,
-            "source": "교육훈련(근무지내) · 유가조회 생략",
+            "source": "교육훈련(근무지내) · 단가조회 생략",
             "evidence_status": "not_required",
             "cache_hit": False,
         }
@@ -226,7 +226,7 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
     elif req.public_vehicle:
         price_result = {
             "price": None,
-            "source": "공용차량 이용 · 유가조회 생략",
+            "source": "공용차량 이용 · 단가조회 생략",
             "evidence_status": "not_required",
             "cache_hit": False,
         }
@@ -237,7 +237,19 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         if req.travel_date > today and spec.price_vehicle_type in {"gasoline", "diesel", "lpg"}:
             raise ValueError("미래 날짜의 오피넷 유가는 조회할 수 없습니다.")
 
-        if req.travel_date == today and spec.price_vehicle_type in {"gasoline", "diesel", "lpg"}:
+        if spec.price_vehicle_type == "hydrogen":
+            if req.manual_energy_price is None:
+                raise ValueError(
+                    "수소차는 지역별 충전단가 차이가 커 자동단가를 적용하지 않습니다. "
+                    "실제 충전단가 또는 확인 가능한 지역 수소단가를 직접 입력해주세요."
+                )
+            price_result = {
+                "price": float(req.manual_energy_price),
+                "source": "사용자 직접입력 · 수소 충전단가",
+                "evidence_status": "manual_hydrogen_price",
+                "cache_hit": False,
+            }
+        elif req.travel_date == today and spec.price_vehicle_type in {"gasoline", "diesel", "lpg"}:
             if req.manual_energy_price is None:
                 raise ValueError(
                     "오피넷 당일 지역별 일평균 유가는 아직 제공되지 않습니다. "
@@ -295,7 +307,7 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         price_source=price_result["source"],
         price_cache_hit=bool(price_result.get("cache_hit")),
         evidence_status=price_result["evidence_status"],
-        fuel_price_date=req.travel_date if price_result["price"] is not None else None,
+        fuel_price_date=(price_result.get("effective_from") or req.travel_date) if price_result["price"] is not None else None,
         vehicle_label=spec.label,
         effective_efficiency=float(spec.efficiency),
         efficiency_unit=spec.efficiency_unit,
