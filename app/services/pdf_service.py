@@ -206,7 +206,7 @@ async def generate_estimate_pdf(
       <div class="formula">
         편도 기준거리 {_num(result.one_way_distance_km)} km / 왕복횟수 {round_trips}<br>
         {_e(result.calculation_formula)}<br>
-        <span class="small">거리 근거: {_e(result.distance_source)} / 가격 출처: {_e(result.price_source)}</span>
+        <span class="small">거리 근거: {_e(result.distance_source)} / 단가 출처: {_e(result.price_source)}</span>
       </div>
     </div>
 
@@ -480,12 +480,15 @@ async def generate_regulation_pdf(
     compact_page_class = " compact-page" if movement_count >= 6 or len(passenger_names) >= 2 else ""
     if result.efficiency_unit == "km/kWh":
         segment_cost_label = "구간 충전비"
+        energy_cost_label = "충전비"
         energy_total_label = "충전비 합계"
     elif result.efficiency_unit == "km/kg":
         segment_cost_label = "구간 수소연료비"
+        energy_cost_label = "수소연료비"
         energy_total_label = "수소연료비 합계"
     else:
         segment_cost_label = "구간 연료비"
+        energy_cost_label = "연료비"
         energy_total_label = "연료비 합계"
 
     if evidence_uri:
@@ -790,7 +793,7 @@ async def generate_regulation_pdf(
       </tr>
       <tr>
         <th>운임</th>
-        <th>연료비</th><td class="money">{_won(result.estimated_transport_cost)}</td>
+        <th>{_e(energy_cost_label)}</th><td class="money">{_won(result.estimated_transport_cost)}</td>
         <th>통행료</th><td class="money">{_won(result.toll_fee)}</td>
         <th>주차료</th><td class="money">{_won(result.parking_fee)}</td>
       </tr>
