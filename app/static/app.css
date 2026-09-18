@@ -291,9 +291,31 @@ button:disabled{opacity:.45;cursor:not-allowed}
   .sidebar{top:10px}
 }
 @media(max-width:780px){
-  .shell{padding:24px 12px 50px}
+  .shell{padding:24px 12px 120px}
   .hero{grid-template-columns:1fr}
   .hero-actions{width:100%;grid-template-columns:1fr;margin-top:2px}
+  .hero-actions:not(.hidden){
+    position:fixed;
+    left:12px;
+    right:12px;
+    bottom:calc(12px + env(safe-area-inset-bottom));
+    width:auto;
+    margin:0;
+    padding:8px;
+    z-index:1000;
+    border:1px solid rgba(191,219,254,.95);
+    border-radius:16px;
+    background:rgba(255,255,255,.94);
+    box-shadow:0 12px 34px rgba(15,23,42,.20);
+    backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px)
+  }
+  .hero-actions:not(.hidden) .final-output{
+    width:100%;
+    min-height:54px;
+    font-size:17px;
+    border-radius:12px
+  }
   .app-layout{grid-template-columns:1fr}
   .sidebar{position:static}
   .work-grid,.two,.button-row,.money-grid{grid-template-columns:1fr}
