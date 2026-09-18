@@ -39,6 +39,9 @@ def _find_sigungu_price(prices: dict[str, float], sigungu_name: str) -> float:
         ):
             return float(price)
 
+    if "세종" in target and len(prices) == 1:
+        return float(next(iter(prices.values())))
+
     preview = ", ".join(list(prices.keys())[:12]) or "(비어 있음)"
     raise RuntimeError(
         f"오피넷 캐시 가격표에서 {sigungu_name} 가격을 찾지 못했습니다. "
@@ -110,9 +113,10 @@ async def get_energy_price(
             except Exception as exc:
                 raise RuntimeError(f"오피넷 API 조회 실패: {exc}") from exc
 
+            sejong_scope = "세종" in (province_name or "")
             return {
                 "price": api_result["price"],
-                "source": "한국석유공사 오피넷 API",
+                "source": "한국석유공사 오피넷 API · 세종시 평균" if sejong_scope else "한국석유공사 오피넷 API",
                 "source_url": api_result.get("source_url"),
                 "evidence_status": "api_price_ready",
                 "evidence_path": None,
