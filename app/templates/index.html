@@ -14,7 +14,7 @@
       <h1>여비정산 자동화</h1>
       <p class="sub">출장신청서 PDF를 불러오거나 직접 입력한 뒤 거리와 여비를 확인합니다.</p>
     </div>
-    <div class="badge">v1.7 READABILITY</div>
+    <div class="badge">v1.8 UI POLISH</div>
   </section>
 
   <div class="app-layout">
@@ -65,22 +65,37 @@
           <section id="tab1" class="tab-panel active">
             <section class="card">
               <h2>1. 출장·거리</h2>
-              <div class="two">
-                <label>출장 시작일<input id="travel_date" type="date" required></label>
-                <label>출장 종료일<input id="end_date" type="date" required></label>
+              <div class="form-row">
+                <label for="travel_date">출장 시작일</label>
+                <input id="travel_date" type="date" required>
               </div>
-              <label>출발지<input id="origin" type="text" placeholder="예: 천안버들유치원" required></label>
-              <label>출장지<input id="destination" type="text" placeholder="예: 충청남도교육청" required></label>
-              <label>출장 목적<input id="purpose" type="text" placeholder="예: 협의회 참석"></label>
-              <label>출장 유형
+              <div class="form-row">
+                <label for="end_date">출장 종료일</label>
+                <input id="end_date" type="date" required>
+              </div>
+              <div class="form-row">
+                <label for="origin">출발지</label>
+                <input id="origin" type="text" placeholder="예: 천안버들유치원" required>
+              </div>
+              <div class="form-row">
+                <label for="destination">출장지</label>
+                <input id="destination" type="text" placeholder="예: 충청남도교육청" required>
+              </div>
+              <div class="form-row">
+                <label for="purpose">출장 목적</label>
+                <input id="purpose" type="text" placeholder="예: 협의회 참석">
+              </div>
+              <div class="form-row">
+                <label for="trip_type">출장 유형</label>
                 <select id="trip_type">
                   <option value="normal">일반출장</option>
                   <option value="training">교육훈련</option>
                 </select>
-              </label>
+              </div>
 
               <div class="section-label">차량</div>
-              <label>차량 종류
+              <div class="form-row">
+                <label for="vehicle_type">차량 종류</label>
                 <select id="vehicle_type">
                   <option value="gasoline">휘발유</option>
                   <option value="diesel">경유</option>
@@ -90,17 +105,21 @@
                   <option value="electric">전기</option>
                   <option value="hydrogen">수소</option>
                 </select>
-              </label>
-              <label id="phevEnergyWrap" class="hidden">플러그인하이브리드 사용 에너지원
+              </div>
+              <div id="phevEnergyWrap" class="form-row hidden">
+                <label for="phev_energy_source">사용 에너지원</label>
                 <select id="phev_energy_source">
                   <option value="gasoline">휘발유 사용</option>
                   <option value="electric">전기충전 사용</option>
                 </select>
-              </label>
-              <label>적용 연비 / 전비
-                <input id="efficiency" type="text" readonly>
-                <span class="help">승용차 유종별 기준 연비(전비)를 자동 적용합니다.</span>
-              </label>
+              </div>
+              <div class="form-row form-row-help">
+                <label for="efficiency">적용 연비 / 전비</label>
+                <div>
+                  <input id="efficiency" type="text" readonly>
+                  <span class="help">승용차 유종별 기준 연비(전비)를 자동 적용합니다.</span>
+                </div>
+              </div>
               <label id="roundTripWrap" class="check"><input id="round_trip" type="checkbox" checked>왕복으로 계산</label>
 
               <div class="button-row">
