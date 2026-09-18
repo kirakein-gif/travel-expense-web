@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
+import subprocess
 import sys
 from datetime import date
 from html.parser import HTMLParser
@@ -24,21 +26,13 @@ class TextExtractor(HTMLParser):
             self.parts.append(text)
 
 
-def fetch_official_rate() -> dict:
-    req = Request(
-        SOURCE_URL,
-        headers={
-            "User-Agent": "Mozilla/5.0 (compatible; travel-expense-web/1.0; +GitHub Actions)"
-        },
-    )
-    with urlopen(req, timeout=30) as response:
-        html = response.read().decode("utf-8", errors="replace")
-
+def _visible_text(html: str) -> str:
     parser = TextExtractor()
     parser.feed(html)
-    text = " ".join(parser.parts)
-    text = re.sub(r"\s+", " ", text)
+    return re.sub(r"\s+", " ", " ".join(parser.parts))
 
+
+def _parse_official_rate(text: str) -> dict | None:
     pattern = re.compile(
         r"기후에너지환경부\s+"
         r"([0-9.]+|-)\s+"
@@ -50,11 +44,7 @@ def fetch_official_rate() -> dict:
     )
     match = pattern.search(text)
     if not match:
-        raise RuntimeError(
-            "무공해차 누리집에서 기후에너지환경부 요금 행을 찾지 못했습니다. "
-            "페이지 구조 변경 여부를 확인해주세요."
-        )
-
+        return None
     return {
         "slow_under_30": float(match.group(1)),
         "medium_30_49": float(match.group(2)),
@@ -63,6 +53,65 @@ def fetch_official_rate() -> dict:
         "ultra_200_plus": float(match.group(5)),
         "source_updated_at": match.group(6),
     }
+
+
+def _fetch_static_html() -> str:
+    req = Request(
+        SOURCE_URL,
+        headers={
+            "User-Agent": "Mozilla/5.0 (compatible; travel-expense-web/1.0; +GitHub Actions)"
+        },
+    )
+    with urlopen(req, timeout=30) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def _fetch_rendered_html() -> str:
+    candidates = ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
+    executable = next((name for name in candidates if shutil.which(name)), None)
+    if not executable:
+        raise RuntimeError(
+            "정적 HTML에서 요금표를 찾지 못했고 GitHub Actions 실행기에 "
+            "Chrome/Chromium도 없어 동적 화면을 확인할 수 없습니다."
+        )
+
+    completed = subprocess.run(
+        [
+            executable,
+            "--headless=new",
+            "--no-sandbox",
+            "--disable-gpu",
+            "--disable-dev-shm-usage",
+            "--virtual-time-budget=12000",
+            "--dump-dom",
+            SOURCE_URL,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    return completed.stdout
+
+
+def fetch_official_rate() -> dict:
+    static_text = _visible_text(_fetch_static_html())
+    parsed = _parse_official_rate(static_text)
+    if parsed:
+        print("정적 HTML에서 공식 요금 확인")
+        return parsed
+
+    print("정적 HTML에 요금표가 없어 headless Chrome으로 동적 화면 확인")
+    rendered_text = _visible_text(_fetch_rendered_html())
+    parsed = _parse_official_rate(rendered_text)
+    if parsed:
+        print("동적 화면에서 공식 요금 확인")
+        return parsed
+
+    raise RuntimeError(
+        "무공해차 누리집에서 기후에너지환경부 요금 행을 찾지 못했습니다. "
+        "페이지 구조 또는 데이터 호출 방식을 확인해주세요."
+    )
 
 
 def main() -> int:
