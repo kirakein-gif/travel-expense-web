@@ -386,20 +386,65 @@ $("calculateButton").addEventListener("click",async()=>{
 });
 
 $("evidenceButton").addEventListener("click",async()=>{
-  if(!lastEvidencePayload)return;$("evidenceButton").disabled=true;const old=$("evidenceButton").textContent;$("evidenceButton").textContent="증빙 생성 중...";$("globalStatus").textContent="오피넷 증빙 화면 생성 중...";
+  if(!lastEvidencePayload)return;
+  $("evidenceButton").disabled=true;
+  const old=$("evidenceButton").textContent;
+  $("evidenceButton").textContent="증빙 준비 중...";
   try{
-    const r=await fetch("/api/opinet-evidence.png",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(lastEvidencePayload)});if(!r.ok){const d=await r.json();throw new Error(d.detail||"증빙 생성 실패");}
-    const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="오피넷증빙_"+lastEvidencePayload.travel_date+"_"+lastEvidencePayload.sigungu+".png";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-    $("evidence").textContent="verified_web_capture";$("globalStatus").textContent="증빙 생성 완료";
-  }catch(e){$("evidence").textContent="evidence_failed";$("globalStatus").textContent="증빙 생성 실패 · "+e.message;}finally{$("evidenceButton").textContent=old;$("evidenceButton").disabled=false;}
+    if(evidencePrefetchPromise){
+      $("globalStatus").textContent="미리 준비 중인 오피넷 증빙을 기다리는 중...";
+      try{await evidencePrefetchPromise;}catch(e){}
+    }
+    if(prefetchedEvidence&&evidencePayloadMatches(prefetchedEvidence.evidencePayload,lastEvidencePayload)){
+      downloadEvidenceBlob(prefetchedEvidence.blob,lastEvidencePayload);
+      $("evidence").textContent="verified_web_capture · 임시 캐시";
+      $("globalStatus").textContent="미리 준비한 오피넷 증빙을 바로 내려받았습니다.";
+      return;
+    }
+
+    $("globalStatus").textContent="오피넷 증빙 화면 생성 중...";
+    const response=await fetch("/api/opinet-evidence.png",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(lastEvidencePayload)});
+    if(!response.ok){const d=await response.json();throw new Error(d.detail||"증빙 생성 실패");}
+    const blob=await response.blob(),dataUrl=await blobToDataUrl(blob);
+    prefetchedEvidence={
+      context:evidenceContextKey(basePayload()),
+      dataUrl,
+      blob,
+      evidencePayload:lastEvidencePayload
+    };
+    setEvidencePrepStatus("✓ 증빙 준비 완료","ready");
+    downloadEvidenceBlob(blob,lastEvidencePayload);
+    $("evidence").textContent="verified_web_capture · 임시 캐시";
+    $("globalStatus").textContent="증빙 생성 완료 · 같은 출장의 PDF에서는 재사용합니다.";
+  }catch(e){
+    $("evidence").textContent="evidence_failed";
+    $("globalStatus").textContent="증빙 생성 실패 · "+e.message;
+  }finally{
+    $("evidenceButton").textContent=old;
+    $("evidenceButton").disabled=false;
+  }
 });
 $("pdfButton").addEventListener("click",async()=>{
-  if(!lastPayload)return;$("pdfButton").disabled=true;const old=$("pdfButton").textContent;$("pdfButton").textContent="PDF 생성 중...";
+  if(!lastPayload)return;
+  $("pdfButton").disabled=true;
+  const old=$("pdfButton").textContent;
+  $("pdfButton").textContent="PDF 생성 중...";
   try{
-    const current=basePayload(),pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,passengers:current.passengers,purpose:current.purpose,manual_energy_price:current.manual_energy_price};
-    const r=await fetch("/api/report.pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pdfPayload)});if(!r.ok){const d=await r.json();throw new Error(d.detail||"PDF 생성 실패");}
-    const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="여비산출내역_"+pdfPayload.travel_date+".pdf";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-  }catch(e){$("globalStatus").textContent=e.message;}finally{$("pdfButton").textContent=old;$("pdfButton").disabled=false;}
+    const current=basePayload();
+    const cachedEvidence=await evidenceForPdf();
+    const pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,passengers:current.passengers,purpose:current.purpose,manual_energy_price:current.manual_energy_price,evidence_image_base64:cachedEvidence};
+    $("globalStatus").textContent=cachedEvidence?"준비된 오피넷 증빙을 재사용하여 PDF 생성 중...":"PDF 생성 중...";
+    const response=await fetch("/api/report.pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pdfPayload)});
+    if(!response.ok){const d=await response.json();throw new Error(d.detail||"PDF 생성 실패");}
+    const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download="여비산출내역_"+pdfPayload.travel_date+".pdf";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    $("globalStatus").textContent=cachedEvidence?"PDF 생성 완료 · 오피넷 증빙 재사용":"PDF 생성 완료";
+  }catch(e){
+    $("globalStatus").textContent=e.message;
+  }finally{
+    $("pdfButton").textContent=old;
+    $("pdfButton").disabled=false;
+  }
 });
 $("regulationPdfButton").addEventListener("click",async()=>{
   if(!lastPayload)return;
@@ -408,14 +453,17 @@ $("regulationPdfButton").addEventListener("click",async()=>{
   $("regulationPdfButton").textContent="규정서식 생성 중...";
   try{
     const current=basePayload();
-    const pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,passengers:current.passengers,purpose:current.purpose,manual_energy_price:current.manual_energy_price};
-    const r=await fetch("/api/report-regulation.pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pdfPayload)});
-    if(!r.ok){const d=await r.json();throw new Error(d.detail||"규정서식 PDF 생성 실패");}
-    const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
+    const cachedEvidence=await evidenceForPdf();
+    const pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,passengers:current.passengers,purpose:current.purpose,manual_energy_price:current.manual_energy_price,evidence_image_base64:cachedEvidence};
+    $("globalStatus").textContent=cachedEvidence?"준비된 오피넷 증빙을 재사용하여 규정서식 생성 중...":"규정서식 PDF 생성 중...";
+    const response=await fetch("/api/report-regulation.pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pdfPayload)});
+    if(!response.ok){const d=await response.json();throw new Error(d.detail||"규정서식 PDF 생성 실패");}
+    const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
     a.href=url;
     a.download="규정서식_여비신청서_"+pdfPayload.travel_date+".pdf";
     a.click();
     setTimeout(()=>URL.revokeObjectURL(url),1000);
+    $("globalStatus").textContent=cachedEvidence?"규정서식 생성 완료 · 오피넷 증빙 재사용":"규정서식 PDF 생성 완료";
   }catch(e){
     $("globalStatus").textContent=e.message;
   }finally{
