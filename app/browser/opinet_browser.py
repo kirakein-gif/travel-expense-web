@@ -367,7 +367,7 @@ async def _highlight_evidence_target(
     expected_price: float | None = None,
 ) -> bool:
     """Visually mark the region row and applied price cell for evidence screenshots."""
-    target = re.sub(r"\\s+", "", normalize_sigungu(sigungu_name))
+    target = re.sub(r"\s+", "", normalize_sigungu(sigungu_name))
     if not target:
         return False
 
@@ -384,7 +384,7 @@ async def _highlight_evidence_target(
         for ri in range(min(row_count, 7)):
             cells = rows.nth(ri).locator("th, td")
             texts = [
-                re.sub(r"\\s+", " ", (await cells.nth(i).inner_text()).strip())
+                re.sub(r"\s+", " ", (await cells.nth(i).inner_text()).strip())
                 for i in range(await cells.count())
             ]
             for ci, text in enumerate(texts):
@@ -405,11 +405,11 @@ async def _highlight_evidence_target(
                 continue
 
             row_name = re.sub(
-                r"\\s+",
+                r"\s+",
                 " ",
                 (await cells.nth(0).inner_text()).strip(),
             )
-            row_key = re.sub(r"\\s+", "", normalize_sigungu(row_name))
+            row_key = re.sub(r"\s+", "", normalize_sigungu(row_name))
             if not row_key:
                 continue
 
