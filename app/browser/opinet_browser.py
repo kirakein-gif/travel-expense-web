@@ -159,6 +159,27 @@ async def _select_single_province_checkbox(page: Page, province: str) -> None:
     await page.wait_for_timeout(500)
 
 
+async def _uncheck_by_exact_label(page: Page, label_text: str) -> bool:
+    """Uncheck an optional product column by its visible OPINET label."""
+    checkbox = await _find_checkbox_by_exact_label(page, label_text)
+    if checkbox is None:
+        return False
+    try:
+        if await checkbox.is_checked():
+            await checkbox.uncheck(force=True)
+    except Exception:
+        await checkbox.evaluate(
+            """
+            (el) => {
+                el.checked = false;
+                el.dispatchEvent(new Event('input', {bubbles:true}));
+                el.dispatchEvent(new Event('change', {bubbles:true}));
+            }
+            """
+        )
+    return True
+
+
 async def _select_by_id_or_label(page: Page, element_id: str, label_text: str) -> None:
     labels = page.locator("label", has_text=label_text)
     for i in range(await labels.count()):
@@ -467,6 +488,15 @@ async def _prepare_oil_page(page: Page, travel_date: date, province: str, vehicl
     await page.goto(OIL_URL, wait_until="networkidle", timeout=60_000)
     await _select_date(page, travel_date)
     await _select_single_province_checkbox(page, province)
+
+    # Evidence only needs the common road-vehicle fuels. Remove premium gasoline
+    # and kerosene from OPINET's own result selection so the captured table is
+    # narrower and easier to read, while leaving regular gasoline and diesel intact.
+    for unused_label in ("고급휘발유", "실내등유", "등유"):
+        try:
+            await _uncheck_by_exact_label(page, unused_label)
+        except Exception:
+            pass
 
     try:
         await _select_by_id_or_label(page, PRODUCT_IDS[vehicle_type], PRODUCT_LABELS[vehicle_type])
