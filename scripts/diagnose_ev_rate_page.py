@@ -1,35 +1,16 @@
-from __future__ import annotations
-
-import re
-from html import unescape
-from urllib.parse import quote, urljoin
 from urllib.request import Request, urlopen
 
-BASE = "https://www.me.go.kr"
-SEARCHES = [
-    f"{BASE}/home/web/board/list.do?boardMasterId=1&menuId=286&maxPageItems=20&pagerOffset=0&searchKey=title&searchValue={quote('충전요금')}",
-    f"{BASE}/home/web/board/list.do?boardMasterId=39&menuId=290&maxPageItems=20&pagerOffset=0&searchKey=title&searchValue={quote('충전요금')}",
+URLS = [
+"https://www.me.go.kr/home/web/board/list.do?boardCategoryId=39&boardMasterId=1&condition.createDeptCode=&condition.createDeptName=&condition.createId=&condition.fromDate=&condition.hideCate=&condition.proxyParam1=&condition.proxyParam2=&condition.proxyParam3=&condition.toDate=&decorator=&initialLoad=&maxIndexPages=10&maxPageItems=10&menuId=286&order=&pagerOffset=0&proxyListPath=&proxyReadPath=&searchKey=&searchValue=",
+"https://www.me.go.kr/home/mob/board/list.do?boardCategoryId=&boardMasterId=39&maxIndexPages=5&maxPageItems=10&menuId=290&pagerOffset=0&searchKey=&searchValue=",
+"https://www.me.go.kr/home/web/newsRead.do?boardId=1874650&boardMasterId=939&menuId=10607",
 ]
-
-
-def fetch(url: str) -> str:
-    req = Request(url, headers={
-        "User-Agent": "Mozilla/5.0",
-        "Accept-Language": "ko-KR,ko;q=0.9",
-    })
-    with urlopen(req, timeout=30) as res:
-        text = res.read().decode("utf-8", errors="replace")
-        print("FETCH", res.status, len(text), url)
-        return text
-
-
-for url in SEARCHES:
-    html = fetch(url)
-    print("contains 2026 title:", "전기차 공공 충전 요금 체계 개편" in html)
-    print("contains charge price:", "충전요금" in html)
-    links = re.findall(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', html, flags=re.I|re.S)
-    for href, label in links:
-        label_text = re.sub(r"<[^>]+>", " ", unescape(label))
-        label_text = re.sub(r"\s+", " ", label_text).strip()
-        if "충전" in label_text and "요금" in label_text:
-            print("MATCH_LINK", label_text[:180], urljoin(url, unescape(href)))
+for url in URLS:
+    try:
+        req=Request(url,headers={"User-Agent":"Mozilla/5.0","Accept-Language":"ko-KR,ko;q=0.9"})
+        with urlopen(req,timeout=30) as res:
+            text=res.read().decode("utf-8",errors="replace")
+            print("OK",res.status,len(text),url)
+            print("charge", "충전" in text, "325.6", "325.6" in text, "title", "전기차 공공 충전 요금 체계 개편" in text)
+    except Exception as e:
+        print("FAIL",url,repr(e))
