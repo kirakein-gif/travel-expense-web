@@ -1,3 +1,5 @@
+import base64
+import binascii
 import os
 import shutil
 import tempfile
@@ -30,6 +32,32 @@ def _evidence_vehicle(req: TravelRequest) -> str | None:
     if req.vehicle_type == "phev" and req.phev_energy_source == "gasoline":
         return "gasoline"
     return None
+
+
+def _prefetched_evidence_path(data_url: str | None, evidence_dir: str) -> str | None:
+    if not data_url:
+        return None
+
+    payload = data_url.strip()
+    if "," in payload:
+        header, payload = payload.split(",", 1)
+        if "base64" not in header.lower():
+            raise ValueError("증빙 이미지 형식을 확인해주세요.")
+
+    try:
+        raw = base64.b64decode(payload, validate=True)
+    except (binascii.Error, ValueError):
+        raise ValueError("증빙 이미지 디코딩에 실패했습니다.")
+
+    if not raw:
+        return None
+    if len(raw) > 8 * 1024 * 1024:
+        raise ValueError("증빙 이미지는 8MB 이하만 사용할 수 있습니다.")
+
+    path = os.path.join(evidence_dir, "prefetched_opinet.png")
+    with open(path, "wb") as fp:
+        fp.write(raw)
+    return path
 
 
 @router.post("/import-travel-pdf")
@@ -112,14 +140,15 @@ async def report_pdf(req: TravelRequest, background_tasks: BackgroundTasks):
         fd, output_path = tempfile.mkstemp(prefix="travel_expense_", suffix=".pdf")
         os.close(fd)
 
-        evidence_path = None
+        evidence_path = _prefetched_evidence_path(req.evidence_image_base64, evidence_dir)
         evidence_error = None
         evidence_vehicle = _evidence_vehicle(req)
 
         if result.evidence_status == "manual_price":
             evidence_error = "당일 오피넷 일평균 미제공으로 적용 유가를 사용자가 직접 입력했습니다."
         elif (
-            evidence_vehicle
+            evidence_path is None
+            and evidence_vehicle
             and result.energy_price is not None
             and not req.public_vehicle
         ):
@@ -169,14 +198,15 @@ async def report_regulation_pdf(req: TravelRequest, background_tasks: Background
         )
         os.close(fd)
 
-        evidence_path = None
+        evidence_path = _prefetched_evidence_path(req.evidence_image_base64, evidence_dir)
         evidence_error = None
         evidence_vehicle = _evidence_vehicle(req)
 
         if result.evidence_status == "manual_price":
             evidence_error = "당일 오피넷 일평균 미제공으로 적용 유가를 사용자가 직접 입력했습니다."
         elif (
-            evidence_vehicle
+            evidence_path is None
+            and evidence_vehicle
             and result.energy_price is not None
             and not req.public_vehicle
         ):
