@@ -70,7 +70,9 @@ def outside_travel_eligibility(
     origin = travel_jurisdiction(origin_province, origin_sigungu)
     destination = travel_jurisdiction(destination_province, destination_sigungu)
     raw_round_trip_km = float(one_way_km) * 2
-    round_trip_km = round(raw_round_trip_km, 1)
+    # Kakao route distance is meter-based. Keep 0.001km precision here so a
+    # value such as 11.98km is not displayed as 12.0km while being rejected.
+    round_trip_km = round(raw_round_trip_km, 3)
 
     if origin.key == destination.key:
         return {
