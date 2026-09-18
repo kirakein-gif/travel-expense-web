@@ -378,8 +378,13 @@ $("calculateButton").addEventListener("click",async()=>{
     $("fare_summary").textContent=days()+"일 · "+($("trip_type").value==="training"?"교육훈련":"일반출장")+" · 자동차운임 "+(data.estimated_transport_cost==null?"-":fmt(data.estimated_transport_cost)+"원")+" · 일비 "+fmt(data.daily_allowance)+"원 · 식비 "+fmt(data.meal_allowance)+"원";
     $("source").textContent=(data.price_source||"-")+(data.price_cache_hit?" · 캐시":"");
     const spec=currentVehicleSpec(),canEvidence=spec.evidence&&data.energy_price!=null&&!payload.public_vehicle&&data.evidence_status!=="manual_price";
-    if(canEvidence){lastEvidencePayload={travel_date:payload.travel_date,vehicle_type:spec.evidence,province:lastDistance.province,sigungu:lastDistance.sigungu,expected_price:data.energy_price};$("evidenceButton").disabled=false;$("evidence").textContent="API 가격 확인 · 증빙 생성 대기";}
-    else{lastEvidencePayload=null;$("evidenceButton").disabled=true;$("evidence").textContent=data.evidence_status;}
+    if(canEvidence){
+      lastEvidencePayload={travel_date:payload.travel_date,vehicle_type:spec.evidence,province:lastDistance.province,sigungu:lastDistance.sigungu,expected_price:data.energy_price};
+      $("evidenceButton").disabled=false;
+      $("evidence").textContent=prefetchedEvidence&&evidencePayloadMatches(prefetchedEvidence.evidencePayload,lastEvidencePayload)?"verified_web_capture · 임시 캐시":"API 가격 확인 · 증빙 준비 중/대기";
+    }else{
+      lastEvidencePayload=null;$("evidenceButton").disabled=true;$("evidence").textContent=data.evidence_status;
+    }
     $("pdfButton").disabled=false;$("regulationPdfButton").disabled=false;$("outputActions").classList.remove("hidden");$("tab2check").textContent="✓";setResultState("최종 산출 완료","done");
     $("globalStatus").textContent="여비 계산 완료 · 오른쪽 최종 산출을 확인하고 위쪽에서 증빙 또는 PDF를 생성하세요.";
   }catch(e){$("globalStatus").textContent=e.message;}finally{$("calculateButton").disabled=false;}
