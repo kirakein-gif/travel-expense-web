@@ -3,17 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>여비정산 자동화</title>
+  <title>딸깍 여비정산서</title>
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
 <main class="shell">
   <section class="hero">
     <div>
-      <p class="eyebrow">TRAVEL EXPENSE AUTOMATION</p>
-      <h1>여비정산 자동화</h1>
-      <p class="sub">출장신청서 PDF를 불러오거나 직접 입력한 뒤 거리와 여비를 확인합니다.</p>
+      <p class="eyebrow">CLICK TRAVEL EXPENSE</p>
+      <h1>딸깍 여비정산서</h1>
+      <p class="sub">출장신청서 PDF를 불러오면 거리·유가·여비·증빙을 자동 계산합니다.</p>
     </div>
+    <section id="outputActions" class="hero-actions hidden" aria-label="증빙 및 출력">
+      <button id="evidenceButton" type="button" disabled class="teal">오피넷 증빙 생성</button>
+      <button id="pdfButton" type="button" disabled class="dark">2페이지 여비신청서 PDF</button>
+    </section>
   </section>
 
   <div class="app-layout">
@@ -49,7 +53,7 @@
       </section>
 
       <div class="sidebar-meta">
-        <strong>v1.11 RESULT SECTIONS</strong>
+        <strong>v1.12 CLICK BRAND</strong>
         <span>제작자: 천안버들유치원 나대현</span>
       </div>
     </aside>
@@ -206,11 +210,6 @@
         </div>
 
         <aside class="result-column">
-          <section id="outputActions" class="result-actions hidden">
-            <button id="evidenceButton" type="button" disabled class="teal">오피넷 증빙 생성</button>
-            <button id="pdfButton" type="button" disabled class="dark">2페이지 여비신청서 PDF</button>
-          </section>
-
           <section class="card result unified-result">
             <div class="result-head">
               <div>
