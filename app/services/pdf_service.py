@@ -29,6 +29,27 @@ def _num(value: int | float | None, digits: int = 1) -> str:
     return f"{value:,.{digits}f}"
 
 
+def _unit_price_text(result: EstimateResponse) -> str:
+    if result.energy_price is None:
+        return "-"
+    unit = "원/L"
+    if result.efficiency_unit == "km/kWh":
+        unit = "원/kWh"
+    elif result.efficiency_unit == "km/kg":
+        unit = "원/kg"
+    return f"{float(result.energy_price):,.2f}{unit}"
+
+
+def _evidence_reason(result: EstimateResponse, evidence_error: str | None) -> str:
+    if evidence_error:
+        return evidence_error
+    if result.evidence_status == "official_ev_rate":
+        return f"전기차 공공 충전 기준단가 자동 적용 · {result.price_source or '-'}"
+    if result.evidence_status == "manual_hydrogen_price":
+        return "수소 충전단가 사용자 직접입력 · 별도 오피넷 증빙 대상 아님"
+    return "해당 차량은 현재 오피넷 화면 증빙 대상이 아닙니다."
+
+
 def _period(req: TravelRequest) -> str:
     end = req.end_date or req.travel_date
     if end == req.travel_date:
@@ -108,7 +129,7 @@ async def generate_estimate_pdf(
         evidence_block = f'<img class="evidence-img" src="{evidence_uri}" alt="오피넷 증빙">'
         evidence_status = "오피넷 공식 화면 확인 완료"
     else:
-        reason = evidence_error or "해당 차량은 현재 오피넷 화면 증빙 대상이 아닙니다."
+        reason = _evidence_reason(result, evidence_error)
         evidence_block = f'<div class="evidence-empty"><b>증빙 이미지 미첨부</b><br>{_e(reason)}</div>'
         evidence_status = reason
 
@@ -163,7 +184,7 @@ async def generate_estimate_pdf(
       <tr><th>출장지</th><td colspan="3">{_e(destination)}</td></tr>
       <tr><th>거리기준</th><td>{_e(result.distance_source)}</td><th>편도거리</th><td>{_num(result.one_way_distance_km)} km</td></tr>
       <tr><th>차량</th><td>{_e(vehicle)}</td><th>연비/전비</th><td>{_e(eff)}</td></tr>
-      <tr><th>유가 기준일</th><td>{_e(price_date)} (출장 첫째 날)</td><th>적용단가</th><td>{_won(result.energy_price)}</td></tr>
+      <tr><th>단가 기준일</th><td>{_e(price_date)}</td><th>적용단가</th><td>{_e(_unit_price_text(result))}</td></tr>
     </table>
 
     <div class="section">
@@ -208,8 +229,8 @@ async def generate_estimate_pdf(
         편도 {_num(result.one_way_distance_km)} km / 적용거리 {_num(result.transport_distance_km)} km
       </div>
       <div class="basis">
-        <b>유가 및 운임</b><br>
-        {_e(price_date)} / {_won(result.energy_price)}<br>
+        <b>단가 및 운임</b><br>
+        {_e(price_date)} / {_e(_unit_price_text(result))}<br>
         {_e(result.calculation_formula)}
       </div>
     </div>
@@ -457,12 +478,21 @@ async def generate_regulation_pdf(
     movement_count = len(movement_rows)
     dense_class = " dense" if movement_count > 8 else ""
     compact_page_class = " compact-page" if movement_count >= 6 or len(passenger_names) >= 2 else ""
+    if result.efficiency_unit == "km/kWh":
+        segment_cost_label = "구간 충전비"
+        energy_total_label = "충전비 합계"
+    elif result.efficiency_unit == "km/kg":
+        segment_cost_label = "구간 수소연료비"
+        energy_total_label = "수소연료비 합계"
+    else:
+        segment_cost_label = "구간 연료비"
+        energy_total_label = "연료비 합계"
 
     if evidence_uri:
         evidence_block = f'<img class="evidence-img" src="{evidence_uri}" alt="오피넷 증빙">'
         evidence_status = "오피넷 공식 화면 확인 완료"
     else:
-        reason = evidence_error or "해당 차량은 현재 오피넷 화면 증빙 대상이 아닙니다."
+        reason = _evidence_reason(result, evidence_error)
         evidence_block = (
             f'<div class="evidence-empty"><b>증빙 이미지 미첨부</b><br>{_e(reason)}</div>'
         )
@@ -701,8 +731,8 @@ async def generate_regulation_pdf(
         <th>편도거리</th><td>{_num(result.one_way_distance_km)} km</td>
       </tr>
       <tr>
-        <th>유가 기준일</th><td>{_e(price_date)}</td>
-        <th>적용단가</th><td>{_won_exact(result.energy_price)}</td>
+        <th>단가 기준일</th><td>{_e(price_date)}</td>
+        <th>적용단가</th><td>{_e(_unit_price_text(result))}</td>
       </tr>
     </table>
 
@@ -719,15 +749,15 @@ async def generate_regulation_pdf(
         <th>출발지</th>
         <th>도착지</th>
         <th>산출근거</th>
-        <th>구간 연료비</th>
+        <th>{_e(segment_cost_label)}</th>
       </tr>
       {movement_html}
       <tr>
-        <th colspan="4">연료비 합계</th>
+        <th colspan="4">{_e(energy_total_label)}</th>
         <td class="money">{_won(result.estimated_transport_cost)}</td>
       </tr>
     </table>
-    <div class="move-note">※ 구간 연료비는 산식 확인용이며, 최종 연료비는 왕복 1회분 산출 후 10원 미만 절사하여 출장일수·횟수를 반영합니다.</div>
+    <div class="move-note">※ 구간 비용은 산식 확인용이며, 최종 운임은 왕복 1회분 산출 후 10원 미만 절사하여 출장일수·횟수를 반영합니다.</div>
 
     <div class="section-title">여비 지급내역</div>
     <table class="money-table">
@@ -798,8 +828,9 @@ async def generate_regulation_pdf(
         편도 {_num(result.one_way_distance_km)} km / 적용거리 {_num(result.transport_distance_km)} km
       </div>
       <div class="evidence-basis">
-        <b>유가 및 운임</b><br>
-        기준일 {_e(price_date)} / {_won_exact(result.energy_price)}<br>
+        <b>단가 및 운임</b><br>
+        기준일 {_e(price_date)} / {_e(_unit_price_text(result))}<br>
+        {_e(result.price_source)}<br>
         {_e(result.calculation_formula)}
       </div>
     </div>
