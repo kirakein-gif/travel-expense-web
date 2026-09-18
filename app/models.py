@@ -38,6 +38,7 @@ class TravelRequest(BaseModel):
     traveler_name: Optional[str] = None
     passengers: Optional[str] = None
     purpose: Optional[str] = None
+    evidence_image_base64: Optional[str] = None
 
 
 class DistanceResponse(BaseModel):
