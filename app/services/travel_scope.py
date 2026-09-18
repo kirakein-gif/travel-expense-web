@@ -69,7 +69,8 @@ def outside_travel_eligibility(
 ) -> dict:
     origin = travel_jurisdiction(origin_province, origin_sigungu)
     destination = travel_jurisdiction(destination_province, destination_sigungu)
-    round_trip_km = round(float(one_way_km) * 2, 1)
+    raw_round_trip_km = float(one_way_km) * 2
+    round_trip_km = round(raw_round_trip_km, 1)
 
     if origin.key == destination.key:
         return {
@@ -83,7 +84,7 @@ def outside_travel_eligibility(
             "destination_jurisdiction": destination.label,
         }
 
-    if round_trip_km < 12:
+    if raw_round_trip_km < 12:
         return {
             "eligible": False,
             "reason": (
