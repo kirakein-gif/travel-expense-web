@@ -67,20 +67,26 @@ async def resolve_distance(req: TravelRequest) -> DistanceResponse:
     else:
         destination_code = None
 
+    # 관외여비 지급대상 판정은 교육청 고정거리표가 아니라 실제 출발지와
+    # 목적지 사이의 자동차 경로를 기준으로 한다. 충남 내부 고정거리표는
+    # 지급대상으로 판정된 뒤 운임 계산에만 사용한다.
+    actual_one_way_km, actual_distance_cache_hit = await driving_distance(
+        origin["x"], origin["y"], destination["x"], destination["y"]
+    )
+
     fixed_one_way = (
         fixed_distance_km(origin_code, destination_code)
         if (origin_is_chungnam and destination_is_chungnam)
         else None
     )
-    distance_cache_hit = False
 
     if fixed_one_way is not None:
         one_way_km = fixed_one_way
         distance_source = "충청남도교육청 고정거리표"
+        distance_cache_hit = False
     else:
-        one_way_km, distance_cache_hit = await driving_distance(
-            origin["x"], origin["y"], destination["x"], destination["y"]
-        )
+        one_way_km = actual_one_way_km
+        distance_cache_hit = actual_distance_cache_hit
         distance_source = (
             "카카오 길찾기(고정거리표 미등록 임시값)"
             if origin_is_chungnam and destination_is_chungnam
@@ -110,7 +116,7 @@ async def resolve_distance(req: TravelRequest) -> DistanceResponse:
         origin_sigungu=origin_sigungu,
         destination_province=province,
         destination_sigungu=sigungu,
-        one_way_km=one_way_km,
+        one_way_km=actual_one_way_km,
     )
 
     return DistanceResponse(
