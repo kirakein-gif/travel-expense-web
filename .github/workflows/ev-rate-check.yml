@@ -21,6 +21,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compile Python sources
+        run: python -m compileall -q app scripts tests
+
       - name: Check official EV charge rate
         run: python scripts/check_ev_charge_price.py --propose
 
