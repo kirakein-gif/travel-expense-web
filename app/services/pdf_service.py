@@ -507,7 +507,7 @@ async def generate_regulation_pdf(
         )
         evidence_status = reason
 
-    if result.efficiency_unit == "km/kWh":
+    if result.evidence_status == "official_ev_rate":
         evidence_detail_html = (
             '<div class="compact-evidence">'
             '<b>공식 기준단가 자동 적용</b><br>'
@@ -516,13 +516,21 @@ async def generate_regulation_pdf(
             f'<span class="compact-source">{_e(result.price_source)}</span>'
             '</div>'
         )
-    elif result.efficiency_unit == "km/kg":
+    elif result.evidence_status == "manual_hydrogen_price":
         evidence_detail_html = (
             '<div class="compact-evidence">'
             '<b>수소단가 직접입력</b><br>'
             f'적용단가 {_e(_unit_price_text(result))} · '
             '지역별 가격 편차를 고려한 사용자 직접입력값<br>'
             '<span class="compact-source">별도 오피넷 화면 증빙 대상 아님</span>'
+            '</div>'
+        )
+    elif result.evidence_status == "not_required":
+        evidence_detail_html = (
+            '<div class="compact-evidence">'
+            '<b>별도 단가 증빙 불필요</b><br>'
+            f'{_e(result.price_source)}<br>'
+            f'<span class="compact-source">{_e(result.calculation_formula)}</span>'
             '</div>'
         )
     else:
