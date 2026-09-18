@@ -130,7 +130,7 @@ def _records_from_page(page, page_number: int, doc_type: str) -> list[dict[str, 
         rows.append(
             {
                 "page": page_number,
-                "position": " ".join(dict.fromkeys(position_parts)),
+                "position": _compact(list(dict.fromkeys(position_parts))),
                 "name": name,
                 "purpose": purpose,
                 "start_date": start_date,
