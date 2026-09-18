@@ -206,6 +206,11 @@ async def _resolve_area_code(province_name: str, sigungu_name: str) -> str:
         if not province_code:
             raise RuntimeError(f"오피넷 지역코드에서 {province_name}을(를) 찾지 못했습니다.")
 
+        # Sejong has no lower sigungu oil-price level in OPINET.
+        # Use the Sejong province code itself for historical average prices.
+        if province_short == "세종":
+            return province_code
+
         sigungu_rows = await _request(AREA_CODE_ENDPOINT, area=province_code)
         targets = [_clean(sigungu_name)]
         if " " in targets[0]:
