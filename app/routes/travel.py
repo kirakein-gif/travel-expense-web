@@ -53,6 +53,8 @@ def _prefetched_evidence_path(data_url: str | None, evidence_dir: str) -> str | 
         return None
     if len(raw) > 8 * 1024 * 1024:
         raise ValueError("증빙 이미지는 8MB 이하만 사용할 수 있습니다.")
+    if not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("오피넷 증빙 PNG 형식이 아닙니다.")
 
     path = os.path.join(evidence_dir, "prefetched_opinet.png")
     with open(path, "wb") as fp:
