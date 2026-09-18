@@ -15,7 +15,7 @@ from app.models import (
 )
 from app.services.opinet_api_service import check_opinet_api_status
 from app.services.opinet_evidence_service import generate_opinet_evidence
-from app.services.pdf_service import generate_estimate_pdf
+from app.services.pdf_service import generate_estimate_pdf, generate_regulation_pdf
 from app.services.travel_service import estimate_travel, resolve_distance, resolve_price
 from app.services.travel_pdf_import import parse_travel_pdf
 
@@ -150,6 +150,63 @@ async def report_pdf(req: TravelRequest, background_tasks: BackgroundTasks):
             output_path,
             media_type="application/pdf",
             filename=f"travel_expense_{req.travel_date.isoformat()}.pdf",
+        )
+    except Exception as e:
+        if output_path and os.path.exists(output_path):
+            os.remove(output_path)
+        shutil.rmtree(evidence_dir, ignore_errors=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/report-regulation.pdf")
+async def report_regulation_pdf(req: TravelRequest, background_tasks: BackgroundTasks):
+    evidence_dir = tempfile.mkdtemp(prefix="regulation_report_evidence_")
+    output_path = None
+    try:
+        result = await estimate_travel(req)
+        fd, output_path = tempfile.mkstemp(
+            prefix="travel_expense_regulation_", suffix=".pdf"
+        )
+        os.close(fd)
+
+        evidence_path = None
+        evidence_error = None
+        evidence_vehicle = _evidence_vehicle(req)
+
+        if result.evidence_status == "manual_price":
+            evidence_error = "당일 오피넷 일평균 미제공으로 적용 유가를 사용자가 직접 입력했습니다."
+        elif (
+            evidence_vehicle
+            and result.energy_price is not None
+            and not req.public_vehicle
+        ):
+            try:
+                evidence_path = await generate_opinet_evidence(
+                    travel_date=result.fuel_price_date or req.travel_date,
+                    province_name=result.province,
+                    sigungu_name=result.sigungu,
+                    vehicle_type=evidence_vehicle,
+                    expected_price=float(result.energy_price),
+                    evidence_dir=evidence_dir,
+                )
+            except Exception as e:
+                evidence_error = str(e)
+
+        await generate_regulation_pdf(
+            req,
+            result,
+            output_path,
+            evidence_path=evidence_path,
+            evidence_error=evidence_error,
+        )
+
+        background_tasks.add_task(os.remove, output_path)
+        background_tasks.add_task(shutil.rmtree, evidence_dir, ignore_errors=True)
+
+        return FileResponse(
+            output_path,
+            media_type="application/pdf",
+            filename=f"travel_expense_regulation_{req.travel_date.isoformat()}.pdf",
         )
     except Exception as e:
         if output_path and os.path.exists(output_path):
