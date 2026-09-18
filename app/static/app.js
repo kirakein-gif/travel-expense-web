@@ -50,8 +50,9 @@ function clearPriceReview(){
   setResultState(lastDistance?"거리 확인 완료":"입력 대기",lastDistance?"partial":"");
 }
 function clearDistanceReview(){
-  lastDistance=null; $("distanceNextButton").disabled=true; $("tab1check").textContent="";
-  ["resolved_origin","resolved_destination","one_way_distance","distance_source","destination_code"].forEach(id=>$(id).textContent="-");
+  lastDistance=null; $("distanceNextButton").disabled=true; $("step2Button").disabled=true; $("tab1check").textContent="";
+  ["resolved_origin","resolved_destination","one_way_distance","distance_source","destination_code","jurisdiction_pair","eligibility_round_trip","outside_eligibility"].forEach(id=>$(id).textContent="-");
+  $("scopeAlert").className="scope-alert hidden"; $("scopeAlert").textContent="";
   clearPriceReview();
 }
 function updateVehicle(){
@@ -192,7 +193,7 @@ dz.addEventListener("drop",e=>uploadTravelPdf(e.dataTransfer.files[0]));
 
 const today=seoulToday(); $("travel_date").value=today; $("end_date").value=today;
 populateMealCounts(); updateVehicle(); updateTripType(); updateManualPriceVisibility(); updatePreview();
-$("distanceNextButton").addEventListener("click",()=>{if(lastDistance)setTab(2);});
+$("distanceNextButton").addEventListener("click",()=>{if(lastDistance&&lastDistance.outside_travel_eligible)setTab(2);});
 
 $("distanceButton").addEventListener("click",async()=>{
   if(!$("travel_date").value||!$("end_date").value||$("origin").value.trim().length<2||$("destination").value.trim().length<2){$("globalStatus").textContent="출장일과 출발지·출장지를 확인해주세요.";return;}
@@ -204,13 +205,28 @@ $("distanceButton").addEventListener("click",async()=>{
     $("resolved_destination").textContent=placeText(data.resolved_destination_name,data.resolved_destination_address);
     $("one_way_distance").textContent=fmt(data.one_way_distance_km)+" km";$("distance_source").textContent=data.distance_source+(data.distance_cache_hit?" · 캐시":"");
     $("destination_code").textContent=data.destination_support_office||data.destination_code||data.sigungu||"-";
-    $("tab1check").textContent="✓";$("distanceNextButton").disabled=false;setResultState("거리 확인 완료","partial");updateManualPriceVisibility();
-    $("globalStatus").textContent="거리 확인 완료 · 오른쪽 산출 결과를 확인한 뒤 여비 상세로 이동하세요.";
+    $("jurisdiction_pair").textContent=(data.origin_jurisdiction||"-")+" → "+(data.destination_jurisdiction||"-");
+    $("eligibility_round_trip").textContent=fmt(data.eligibility_round_trip_km)+" km · 1회 왕복 기준";
+    $("outside_eligibility").textContent=data.outside_travel_eligible?"지급 대상":"지급 대상 아님";
+    $("scopeAlert").className="scope-alert "+(data.outside_travel_eligible?"eligible":"blocked");
+    $("scopeAlert").textContent=(data.outside_travel_eligible?"관외여비 지급 대상 · ":"관외여비 지급 대상 아님 · ")+data.outside_travel_reason;
+    updateManualPriceVisibility();
+
+    if(data.outside_travel_eligible){
+      $("tab1check").textContent="✓"; $("distanceNextButton").disabled=false; $("step2Button").disabled=false;
+      setResultState("관외 대상 · 거리 확인 완료","partial");
+      $("globalStatus").textContent="관외여비 지급 대상입니다. 오른쪽 판정과 거리를 확인한 뒤 여비 상세로 이동하세요.";
+    }else{
+      $("tab1check").textContent="!"; $("distanceNextButton").disabled=true; $("step2Button").disabled=true;
+      setResultState("관외 대상 아님","blocked");
+      $("globalStatus").textContent="관외여비 지급 대상이 아닙니다. "+data.outside_travel_reason;
+    }
   }catch(e){$("globalStatus").textContent=e.message;}finally{$("distanceButton").disabled=false;}
 });
 
 $("calculateButton").addEventListener("click",async()=>{
   if(!lastDistance){$("globalStatus").textContent="먼저 1단계에서 거리를 확인해주세요.";setTab(1);return;}
+  if(!lastDistance.outside_travel_eligible){$("globalStatus").textContent="관외여비 지급 대상이 아닙니다. "+lastDistance.outside_travel_reason;setTab(1);return;}
   const payload=basePayload(),today=seoulToday();
   if(requiresOpinetPrice(payload)&&payload.travel_date>today){$("globalStatus").textContent="미래 날짜의 오피넷 유가는 조회할 수 없습니다.";return;}
   if(requiresOpinetPrice(payload)&&payload.travel_date===today&&!payload.manual_energy_price){$("globalStatus").textContent="당일 오피넷 일평균 유가는 아직 제공되지 않습니다. 적용 유가를 직접 입력해주세요.";$("manual_energy_price").focus();return;}
