@@ -314,11 +314,26 @@ def _regulation_movement_rows(
     origin_name, destination_name = _movement_place_labels(result)
     one_way_km = float(result.one_way_distance_km or 0)
 
-    unit_cost = int(result.transport_unit_cost or 0)
-    if result.round_trip_count == 0.5:
-        leg_cost = unit_cost
+    unit_price = float(result.energy_price) if result.energy_price is not None else None
+    efficiency = float(result.effective_efficiency) if result.effective_efficiency else None
+    efficiency_unit = result.efficiency_unit or ""
+
+    if efficiency_unit == "km/kWh":
+        price_unit = "원/kWh"
+    elif efficiency_unit == "km/kg":
+        price_unit = "원/kg"
     else:
-        leg_cost = unit_cost / 2
+        price_unit = "원/L"
+
+    if unit_price is not None and efficiency:
+        raw_leg_cost = one_way_km * unit_price / efficiency
+        calculation_basis = (
+            f"{one_way_km:,.1f}km × {unit_price:,.2f}{price_unit} ÷ "
+            f"{efficiency:g}{efficiency_unit}"
+        )
+    else:
+        raw_leg_cost = 0
+        calculation_basis = result.calculation_formula or "자동차운임 미지급"
 
     rows: list[dict] = []
 
@@ -328,8 +343,8 @@ def _regulation_movement_rows(
                 "date": day_label,
                 "departure": departure,
                 "arrival": arrival,
-                "distance_km": one_way_km,
-                "fuel_cost": leg_cost,
+                "calculation_basis": calculation_basis,
+                "fuel_cost": raw_leg_cost,
             }
         )
 
@@ -432,8 +447,8 @@ async def generate_regulation_pdf(
         f'<td>{_e(row["date"])}</td>'
         f'<td>{_e(row["departure"])}</td>'
         f'<td>{_e(row["arrival"])}</td>'
-        f'<td>{_num(row["distance_km"])} km</td>'
-        f'<td class="money">{_won_exact(row["fuel_cost"])}</td>'
+        f'<td class="calc-basis">{_e(row["calculation_basis"])}</td>'
+        f'<td class="money">{_won(row["fuel_cost"])}</td>'
         "</tr>"
         for row in movement_rows
     )
@@ -631,18 +646,18 @@ async def generate_regulation_pdf(
 
     <table class="move-table{dense_class}" style="margin-top:2mm">
       <colgroup>
-        <col style="width:17%">
-        <col style="width:25%">
-        <col style="width:25%">
         <col style="width:15%">
         <col style="width:18%">
+        <col style="width:18%">
+        <col style="width:33%">
+        <col style="width:16%">
       </colgroup>
       <tr>
         <th>일자</th>
         <th>출발지</th>
         <th>도착지</th>
-        <th>거리</th>
-        <th>연료비</th>
+        <th>산출근거</th>
+        <th>구간 연료비</th>
       </tr>
       {movement_html}
       <tr>
@@ -650,6 +665,7 @@ async def generate_regulation_pdf(
         <td class="money">{_won(result.estimated_transport_cost)}</td>
       </tr>
     </table>
+    <div class="move-note">※ 구간 연료비는 산식 확인용이며, 최종 연료비는 왕복 1회분 산출 후 10원 미만 절사하여 출장일수·횟수를 반영합니다.</div>
 
     <div class="section-title">여비 지급내역</div>
     <table class="money-table">
