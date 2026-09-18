@@ -16,10 +16,36 @@ body{margin:0;line-height:1.55}
 h1{font-size:34px;line-height:1.15;margin:0 0 6px;letter-spacing:-.025em}
 h2{font-size:23px;line-height:1.25;margin:0 0 18px;letter-spacing:-.02em}
 .sub{margin:0;color:#5b6b7e;font-size:14px;font-weight:550}
+.sub b{color:#334155;font-weight:800}
+.brand-pop{
+  display:inline-block;
+  padding:.05em .34em .08em;
+  margin-right:.04em;
+  border-radius:.42em;
+  color:#fff;
+  background:linear-gradient(135deg,#2563eb,#4f8df7);
+  box-shadow:0 4px 10px rgba(37,99,235,.18);
+  transform:rotate(-2deg);
+  transform-origin:center;
+  transition:transform .16s ease,box-shadow .16s ease
+}
+h1:hover .brand-pop{
+  transform:rotate(1deg) translateY(-1px) scale(1.035);
+  box-shadow:0 6px 14px rgba(37,99,235,.24)
+}
+.brand-pop::after{
+  content:"✦";
+  display:inline-block;
+  margin-left:.18em;
+  font-size:.56em;
+  vertical-align:.32em;
+  opacity:.9
+}
+.brand-rest{display:inline-block}
 
 .hero-actions{
-  width:min(500px,44vw);
-  display:grid;grid-template-columns:1fr 1fr;gap:10px;
+  width:min(720px,56vw);
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;
   align-self:center;margin-top:4px
 }
 .hero-actions button{
@@ -83,7 +109,7 @@ h2{font-size:23px;line-height:1.25;margin:0 0 18px;letter-spacing:-.02em}
 .side-step.active>span{color:#2867df}
 .side-step:disabled{opacity:.55}
 .output-card button{width:100%;margin-top:10px;min-height:52px}
-.teal{background:#0f766e}.dark{background:#475569}
+.teal{background:#0f766e}.dark{background:#475569}.regulation{background:#eef4ff;color:#245fd1;border:1px solid #b9d3f2}
 
 .workspace{min-width:0}
 .top-status{margin-bottom:12px}
@@ -228,7 +254,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
 @media(max-width:1180px){
   .hero{padding-left:0}
-  .hero-actions{width:min(460px,46vw)}
+  .hero-actions{width:min(680px,58vw)}
   .app-layout{grid-template-columns:250px minmax(0,1fr)}
   .work-grid{grid-template-columns:1fr}
   .result-column{position:static}
