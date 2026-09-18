@@ -1,0 +1,54 @@
+name: Check EV public charge rate
+
+on:
+  schedule:
+    - cron: "10 0 1 * *" # 매월 1일 09:10 KST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-rate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check official EV charge rate
+        run: python scripts/check_ev_charge_price.py --propose
+
+      - name: Detect changes
+        id: diff
+        shell: bash
+        run: |
+          if git diff --quiet -- data/ev_charge_price_history.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update review PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          BRANCH="automation/ev-charge-rate-review"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add data/ev_charge_price_history.json
+          git commit -m "chore: propose updated EV charge rate"
+          git push --force origin "$BRANCH"
+
+          if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+            echo "기존 검토 PR을 갱신했습니다."
+          else
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "전기차 공공 충전요금 변경 검토" \
+              --body $'무공해차 통합누리집의 기후에너지환경부 급속(50~99kW) 단가 변경이 감지되었습니다.\n\n중요: 누리집의 갱신일과 실제 시행일은 다를 수 있습니다. 공식 공지에서 시행일을 확인한 뒤 effective_from을 수정하고 status를 active로 변경한 후 병합해주세요. review_required 상태는 실제 계산에 사용되지 않습니다.'
+          fi
