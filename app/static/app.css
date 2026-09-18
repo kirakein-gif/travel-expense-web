@@ -9,8 +9,10 @@ body{margin:0;line-height:1.55}
 .shell{max-width:1580px;margin:0 auto;padding:22px 24px 48px}
 
 .hero{
-  display:flex;justify-content:space-between;gap:28px;align-items:flex-start;
-  margin-bottom:14px;padding-left:314px
+  display:grid;
+  grid-template-columns:minmax(460px,1.02fr) minmax(420px,.98fr);
+  gap:18px;align-items:start;
+  margin-bottom:14px;padding-left:312px
 }
 .eyebrow{font-size:12px;font-weight:850;letter-spacing:.12em;color:#2563eb;margin:0 0 5px}
 h1{font-size:34px;line-height:1.15;margin:0 0 6px;letter-spacing:-.025em}
@@ -44,9 +46,9 @@ h1:hover .brand-pop{
 .brand-rest{display:inline-block}
 
 .hero-actions{
-  width:min(300px,28vw);
+  width:min(300px,100%);
   display:grid;grid-template-columns:1fr;gap:10px;
-  align-self:center;margin-top:4px
+  justify-self:start;align-self:start;margin-top:22px
 }
 .hero-actions button{
   min-height:46px;padding:11px 14px;
@@ -281,8 +283,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .result-details dl{padding:0 16px 8px}
 
 @media(max-width:1180px){
-  .hero{padding-left:0}
-  .hero-actions{width:min(300px,32vw)}
+  .hero{grid-template-columns:1fr;padding-left:0}
+  .hero-actions{width:min(300px,100%);margin-top:2px}
   .app-layout{grid-template-columns:250px minmax(0,1fr)}
   .work-grid{grid-template-columns:1fr}
   .result-column{position:static}
@@ -290,7 +292,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 }
 @media(max-width:780px){
   .shell{padding:24px 12px 50px}
-  .hero{flex-direction:column}
+  .hero{grid-template-columns:1fr}
   .hero-actions{width:100%;grid-template-columns:1fr;margin-top:2px}
   .app-layout{grid-template-columns:1fr}
   .sidebar{position:static}
