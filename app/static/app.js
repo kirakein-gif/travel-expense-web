@@ -40,7 +40,7 @@ function setResultState(text,kind){
   $("resultState").className="result-state"+(kind?" "+kind:"");
 }
 function resetCalcFields(){
-  ["final_round_trips","final_transport_distance","vehicle_spec","fuel_price_date","price","formula","amount","daily_allowance","daily_note","meal_allowance","meal_note","toll_result","parking_result","lodging_result","source","evidence","total_expense"].forEach(id=>$(id).textContent="-");
+  ["final_round_trips","final_transport_distance","vehicle_spec","fuel_price_date","price","formula","amount","daily_allowance","daily_note","meal_allowance","meal_note","toll_result","parking_result","lodging_result","source","evidence","total_expense","summary_transport","summary_daily","summary_meal","summary_misc"].forEach(id=>$(id).textContent="-");
 }
 function clearPriceReview(){
   lastPayload=null; lastEvidencePayload=null;
@@ -242,7 +242,12 @@ $("calculateButton").addEventListener("click",async()=>{
     $("amount").textContent=data.estimated_transport_cost==null?"단가 연결 후 계산":fmt(data.estimated_transport_cost)+" 원";
     $("daily_allowance").textContent=fmt(data.daily_allowance)+" 원";$("daily_note").textContent=data.daily_note||"-";$("meal_allowance").textContent=fmt(data.meal_allowance)+" 원";$("meal_note").textContent=data.meal_note||"-";
     $("toll_result").textContent=fmt(data.toll_fee)+" 원";$("parking_result").textContent=fmt(data.parking_fee)+" 원";$("lodging_result").textContent=fmt(data.lodging_fee)+" 원";
-    $("total_expense").textContent=data.total_expense==null?"자동차 단가 연결 후 확정":fmt(data.total_expense)+" 원";$("source").textContent=(data.price_source||"-")+(data.price_cache_hit?" · 캐시":"");
+    $("total_expense").textContent=data.total_expense==null?"자동차 단가 연결 후 확정":fmt(data.total_expense)+" 원";
+    $("summary_transport").textContent=data.estimated_transport_cost==null?"-":fmt(data.estimated_transport_cost)+" 원";
+    $("summary_daily").textContent=fmt(data.daily_allowance)+" 원";
+    $("summary_meal").textContent=fmt(data.meal_allowance)+" 원";
+    $("summary_misc").textContent=fmt(Number(data.toll_fee||0)+Number(data.parking_fee||0)+Number(data.lodging_fee||0))+" 원";
+    $("source").textContent=(data.price_source||"-")+(data.price_cache_hit?" · 캐시":"");
     const spec=currentVehicleSpec(),canEvidence=spec.evidence&&data.energy_price!=null&&!payload.public_vehicle&&data.evidence_status!=="manual_price";
     if(canEvidence){lastEvidencePayload={travel_date:payload.travel_date,vehicle_type:spec.evidence,province:lastDistance.province,sigungu:lastDistance.sigungu,expected_price:data.energy_price};$("evidenceButton").disabled=false;$("evidence").textContent="API 가격 확인 · 증빙 생성 대기";}
     else{lastEvidencePayload=null;$("evidenceButton").disabled=true;$("evidence").textContent=data.evidence_status;}
