@@ -3,7 +3,26 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-METRO_MARKERS = ("특별시", "광역시")
+METRO_PROVINCES = {
+    "서울", "서울특별시",
+    "부산", "부산광역시",
+    "대구", "대구광역시",
+    "인천", "인천광역시",
+    "광주", "광주광역시",
+    "대전", "대전광역시",
+    "울산", "울산광역시",
+}
+SEJONG_NAMES = {"세종", "세종시", "세종특별자치시"}
+
+PROVINCE_ALIASES = {
+    "서울특별시": "서울", "부산광역시": "부산", "대구광역시": "대구",
+    "인천광역시": "인천", "광주광역시": "광주", "대전광역시": "대전",
+    "울산광역시": "울산", "세종특별자치시": "세종", "세종시": "세종",
+    "충청남도": "충남", "충청북도": "충북", "전라남도": "전남",
+    "전라북도": "전북", "전북특별자치도": "전북", "경상남도": "경남",
+    "경상북도": "경북", "강원도": "강원", "강원특별자치도": "강원",
+    "제주특별자치도": "제주",
+}
 
 
 @dataclass(frozen=True)
@@ -14,15 +33,16 @@ class TravelJurisdiction:
 
 def travel_jurisdiction(province: str, sigungu: str) -> TravelJurisdiction:
     province = (province or "").strip()
+    province_key = PROVINCE_ALIASES.get(province, province)
     sigungu = (sigungu or "").strip()
     parts = [p for p in sigungu.split() if p]
 
-    if "특별자치시" in province:
-        return TravelJurisdiction(province or sigungu, province or sigungu)
+    if province in SEJONG_NAMES or province_key == "세종":
+        return TravelJurisdiction("세종", "세종")
 
-    if any(marker in province for marker in METRO_MARKERS):
-        unit = parts[0] if parts else province
-        return TravelJurisdiction(f"{province}|{unit}", unit)
+    if province in METRO_PROVINCES or province_key in METRO_PROVINCES:
+        unit = parts[0] if parts else province_key
+        return TravelJurisdiction(f"{province_key}|{unit}", unit)
 
     unit = None
     for part in parts:
@@ -30,7 +50,7 @@ def travel_jurisdiction(province: str, sigungu: str) -> TravelJurisdiction:
             unit = part
             break
     unit = unit or (parts[0] if parts else province)
-    return TravelJurisdiction(f"{province}|{unit}", unit)
+    return TravelJurisdiction(f"{province_key}|{unit}", unit)
 
 
 def outside_travel_eligibility(
