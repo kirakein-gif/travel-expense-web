@@ -141,6 +141,7 @@ h1:hover .brand-pop{
 .result-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:11px}
 .result-head h2{margin-bottom:0}
 .result-kicker{font-size:12px;font-weight:900;letter-spacing:.11em;color:#2563eb;margin:0 0 5px}
+.result-state-group{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
 .result-state{
   font-size:12.5px;font-weight:850;color:#5f6f82;background:#f1f5f9;
   border-radius:999px;padding:7px 11px;white-space:nowrap
@@ -148,6 +149,12 @@ h1:hover .brand-pop{
 .result-state.done{background:#dcfce7;color:#15803d}
 .result-state.partial{background:#dbeafe;color:#1d4ed8}
 .result-state.blocked{background:#ffedd5;color:#c2410c}
+.evidence-prep{
+  font-size:12px;font-weight:800;border-radius:999px;padding:6px 9px;
+  background:#eef6ff;color:#3568b8;white-space:nowrap
+}
+.evidence-prep.ready{background:#ecfdf5;color:#15803d}
+.evidence-prep.failed{background:#fff7ed;color:#c2410c}
 
 label{display:block;font-size:15px;font-weight:750;margin:0 0 19px;color:#26384f}
 input,select,textarea{
