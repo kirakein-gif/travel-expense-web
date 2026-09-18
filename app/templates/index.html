@@ -14,11 +14,16 @@
       <h1>여비정산 자동화</h1>
       <p class="sub">출장신청서 PDF를 불러오거나 직접 입력한 뒤 거리와 여비를 확인합니다.</p>
     </div>
-    <div class="badge">v1.9 COMPACT DETAIL</div>
   </section>
 
   <div class="app-layout">
     <aside class="sidebar">
+      <section class="side-card stage-card">
+        <div class="side-title">작성 단계</div>
+        <button class="side-step active" data-tab="1"><span>1</span><div><b>출장·거리</b><small>출장정보·거리 확인</small></div><em id="tab1check"></em></button>
+        <button id="step2Button" class="side-step" data-tab="2" disabled><span>2</span><div><b>여비 상세</b><small>일비·식비·비용 계산</small></div><em id="tab2check"></em></button>
+      </section>
+
       <section class="side-card">
         <div class="side-title">출장신청서 불러오기</div>
         <label id="dropZone" class="drop-zone" for="pdfFile">
@@ -55,6 +60,10 @@
         <button id="evidenceButton" type="button" disabled class="teal">오피넷 증빙 생성</button>
         <button id="pdfButton" type="button" disabled class="dark">2페이지 여비신청서 PDF</button>
       </section>
+      <div class="sidebar-meta">
+        <strong>v1.10 ONE SCREEN</strong>
+        <span>제작자: 천안버들유치원 나대현</span>
+      </div>
     </aside>
 
     <section class="workspace">
@@ -185,29 +194,20 @@
               </div>
 
               <div class="section-label">직접 입력 비용</div>
-              <div class="form-row">
-                <label for="toll_fee">통행료</label>
-                <input id="toll_fee" type="number" min="0" step="1" value="0">
-              </div>
-              <div class="form-row">
-                <label for="parking_fee">주차료</label>
-                <input id="parking_fee" type="number" min="0" step="1" value="0">
-              </div>
-              <div class="form-row">
-                <label for="lodging_fee">숙박비</label>
-                <input id="lodging_fee" type="number" min="0" step="1" value="0">
+              <div class="cost-grid">
+                <label>통행료<input id="toll_fee" type="number" min="0" step="1" value="0"></label>
+                <label>주차료<input id="parking_fee" type="number" min="0" step="1" value="0"></label>
+                <label>숙박비<input id="lodging_fee" type="number" min="0" step="1" value="0"></label>
               </div>
 
               <div class="section-label">신청인 정보 · PDF 작성용</div>
-              <div class="two">
+              <div class="person-grid">
                 <label>소속<input id="affiliation" type="text" placeholder="예: 천안버들유치원"></label>
                 <label>직급(직위)<input id="position" type="text" placeholder="예: 주무관"></label>
+                <label>신청인 성명<input id="traveler_name" type="text" placeholder="예: 홍길동"></label>
+                <label>동승자<input id="passengers" type="text" placeholder="예: 김영희, 박철수, 이민수"></label>
               </div>
-              <label>신청인 성명<input id="traveler_name" type="text" placeholder="예: 홍길동"></label>
-              <label>동승자
-                <textarea id="passengers" rows="3" placeholder="예: 김영희, 박철수, 이민수"></textarea>
-                <span class="help">파일에서 같은 출장으로 확인된 사람은 왼쪽의 동승 후보에서 선택할 수 있습니다.</span>
-              </label>
+              <div class="help compact-help applicant-help">동승후보 선택값이 자동 반영되며 직접 수정할 수 있습니다.</div>
 
               <div class="button-row">
                 <button id="calculateButton" type="button">여비 계산</button>
