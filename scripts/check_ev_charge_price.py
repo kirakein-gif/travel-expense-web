@@ -3,8 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import shutil
-import subprocess
 import sys
 from datetime import date
 from html.parser import HTMLParser
@@ -66,32 +64,41 @@ def _fetch_static_html() -> str:
         return response.read().decode("utf-8", errors="replace")
 
 
-def _fetch_rendered_html() -> str:
-    candidates = ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
-    executable = next((name for name in candidates if shutil.which(name)), None)
-    if not executable:
+def _fetch_rendered_text() -> str:
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.webdriver.support.ui import WebDriverWait
+    except ImportError as exc:
         raise RuntimeError(
-            "정적 HTML에서 요금표를 찾지 못했고 GitHub Actions 실행기에 "
-            "Chrome/Chromium도 없어 동적 화면을 확인할 수 없습니다."
-        )
+            "동적 요금표 확인에는 selenium이 필요합니다. "
+            "GitHub Actions 설치 단계를 확인해주세요."
+        ) from exc
 
-    completed = subprocess.run(
-        [
-            executable,
-            "--headless=new",
-            "--no-sandbox",
-            "--disable-gpu",
-            "--disable-dev-shm-usage",
-            "--virtual-time-budget=12000",
-            "--dump-dom",
-            SOURCE_URL,
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    return completed.stdout
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1440,1200")
+    options.add_argument("--lang=ko-KR")
+    options.page_load_strategy = "eager"
+
+    driver = webdriver.Chrome(options=options)
+    try:
+        driver.set_page_load_timeout(45)
+        driver.get(SOURCE_URL)
+
+        def official_row_ready(drv):
+            body = drv.find_element(By.TAG_NAME, "body").text
+            return body if "기후에너지환경부" in body and re.search(r"\b325\.6\b", body) else False
+
+        text = WebDriverWait(driver, 45).until(official_row_ready)
+        return re.sub(r"\s+", " ", text)
+    finally:
+        driver.quit()
 
 
 def fetch_official_rate() -> dict:
@@ -101,8 +108,8 @@ def fetch_official_rate() -> dict:
         print("정적 HTML에서 공식 요금 확인")
         return parsed
 
-    print("정적 HTML에 요금표가 없어 headless Chrome으로 동적 화면 확인")
-    rendered_text = _visible_text(_fetch_rendered_html())
+    print("정적 HTML에 요금표가 없어 Selenium Chrome으로 동적 화면 확인")
+    rendered_text = _fetch_rendered_text()
     parsed = _parse_official_rate(rendered_text)
     if parsed:
         print("동적 화면에서 공식 요금 확인")
