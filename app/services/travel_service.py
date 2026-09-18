@@ -36,6 +36,10 @@ def _seoul_today():
     return datetime.now(ZoneInfo("Asia/Seoul")).date()
 
 
+def _is_sejong(province_name: str) -> bool:
+    return "세종" in (province_name or "").strip()
+
+
 async def resolve_distance(req: TravelRequest) -> DistanceResponse:
     origin_alias = resolve_special_destination(req.origin)
     destination_alias = resolve_special_destination(req.destination)
@@ -90,6 +94,15 @@ async def resolve_distance(req: TravelRequest) -> DistanceResponse:
     sigungu = destination.get("region_2depth_name", "")
     origin_province = origin.get("region_1depth_name", "")
     origin_sigungu = origin.get("region_2depth_name", "")
+
+    # Sejong is a single-level special autonomous city. Kakao may return an
+    # empty region_2depth_name or a road/eup/myeon token, but OPINET and travel
+    # jurisdiction logic should consistently treat it as one region: 세종.
+    if _is_sejong(province):
+        sigungu = "세종"
+    if _is_sejong(origin_province):
+        origin_sigungu = "세종"
+
     if not province or not sigungu:
         raise ValueError("출장지의 시도/시군구를 판별하지 못했습니다.")
 
