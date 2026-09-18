@@ -54,7 +54,7 @@
       </section>
 
       <div class="sidebar-meta">
-        <strong>v1.16 MOVEMENT FORMULA</strong>
+        <strong>v1.17 TRAINING COMPACT</strong>
         <span>제작자: 천안버들유치원 나대현</span>
       </div>
     </aside>
@@ -146,7 +146,7 @@
               </div>
 
               <div id="trainingOptions" class="hidden">
-                <div class="section-label">교육훈련</div>
+                <div class="section-label section-label-inline"><span>교육훈련</span><span id="trainingTripHint" class="section-inline-note"></span></div>
                 <div class="form-row">
                   <label for="training_stay_mode">숙박 방식</label>
                   <select id="training_stay_mode">
@@ -162,7 +162,6 @@
                     <span class="help compact-help">예: 3일 교육 중 총 2회 왕복이면 2 입력</span>
                   </div>
                 </div>
-                <div id="trainingTripHint" class="inline-note"></div>
                 <div class="form-row form-row-help">
                   <label for="training_meal_claim_count">식비 청구 횟수</label>
                   <div>
@@ -172,8 +171,7 @@
                 </div>
               </div>
 
-              <label class="check"><input id="public_vehicle" type="checkbox">공용차량 이용</label>
-              <span class="help standalone compact-help">공용차량: 일비 50% 감액 · 자동차운임 미지급</span>
+              <label class="check check-with-note"><input id="public_vehicle" type="checkbox"><span>공용차량 이용</span><span class="check-inline-note">공용차량: 일비 50% 감액 · 운임 미지급</span></label>
 
               <div id="manualPriceWrap" class="hidden">
                 <div class="section-label">당일 출장 유가</div>
@@ -229,7 +227,7 @@
                 <strong id="total_expense">-</strong>
               </div>
               <div class="money-grid">
-                <div><span>자동차운임</span><strong id="summary_transport">-</strong></div>
+                <div><span>운임</span><strong id="summary_transport">-</strong></div>
                 <div><span>일비</span><strong id="summary_daily">-</strong></div>
                 <div><span>식비</span><strong id="summary_meal">-</strong></div>
                 <div><span>기타비용</span><strong id="summary_misc">-</strong></div>
@@ -269,7 +267,7 @@
                   <div><dt>출장유형</dt><dd id="preview_type">-</dd></div>
                   <div><dt>왕복 횟수</dt><dd id="final_round_trips">-</dd></div>
                   <div><dt>적용거리</dt><dd id="final_transport_distance">-</dd></div>
-                  <div class="key-money"><dt>자동차운임</dt><dd id="amount">-</dd></div>
+                  <div class="key-money"><dt>운임</dt><dd id="amount">-</dd></div>
                   <div class="key-money"><dt>일비</dt><dd id="daily_allowance">-</dd></div>
                   <div class="key-money"><dt>식비</dt><dd id="meal_allowance">-</dd></div>
                   <div><dt>통행료</dt><dd id="toll_result">-</dd></div>
@@ -278,7 +276,7 @@
                   <div><dt>차량·연비</dt><dd id="vehicle_spec">-</dd></div>
                   <div><dt>유가 기준일</dt><dd id="fuel_price_date">-</dd></div>
                   <div><dt>적용단가</dt><dd id="price">-</dd></div>
-                  <div class="wide-value"><dt>자동차운임 산식</dt><dd id="formula" class="formula">-</dd></div>
+                  <div class="wide-value"><dt>운임 산식</dt><dd id="formula" class="formula">-</dd></div>
                   <div class="wide-value"><dt>일비 근거</dt><dd id="daily_note" class="note-value">-</dd></div>
                   <div class="wide-value"><dt>식비 근거</dt><dd id="meal_note" class="note-value">-</dd></div>
                   <div><dt>가격출처</dt><dd id="source">-</dd></div>
