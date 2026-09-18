@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from app.browser.opinet_browser import normalize_sigungu, query_opinet_region_prices
+from app.browser.opinet_browser import normalize_province, normalize_sigungu, query_opinet_region_prices
 
 
 def _compact(value: str) -> str:
@@ -44,6 +44,19 @@ async def generate_opinet_evidence(
             matched_name = row_name
             matched_price = float(row_price)
             break
+
+    # Sejong has no sigungu subdivision in the OPINET average-price dataset.
+    # Accept the Sejong province row, or the sole result row when OPINET renders
+    # only one regional average after selecting Sejong.
+    if matched_price is None and normalize_province(province_name) == "세종":
+        for row_name, row_price in result.prices.items():
+            if "세종" in _compact(row_name):
+                matched_name = row_name
+                matched_price = float(row_price)
+                break
+        if matched_price is None and len(result.prices) == 1:
+            matched_name, only_price = next(iter(result.prices.items()))
+            matched_price = float(only_price)
 
     if matched_price is None:
         sample = ", ".join(list(result.prices.keys())[:12]) or "(비어 있음)"
