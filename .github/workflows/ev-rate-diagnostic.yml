@@ -1,0 +1,15 @@
+name: EV rate diagnostic
+
+on:
+  push:
+    branches: [ev-rate-checker-diagnostic]
+    paths:
+      - ".github/workflows/ev-rate-diagnostic.yml"
+      - "scripts/diagnose_ev_rate_page.py"
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python scripts/diagnose_ev_rate_page.py
