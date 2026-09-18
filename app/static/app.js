@@ -17,6 +17,12 @@ const PHEV_SPECS = {
 };
 
 function currentVehicleSpec(){ return $("vehicle_type").value==="phev" ? PHEV_SPECS[$("phev_energy_source").value] : VEHICLE_SPECS[$("vehicle_type").value]; }
+function currentPriceUnit(){
+  const unit=currentVehicleSpec().unit;
+  if(unit==="km/kWh") return "원/kWh";
+  if(unit==="km/kg") return "원/kg";
+  return "원/L";
+}
 function seoulToday(){
   const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Seoul",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
   const map=Object.fromEntries(parts.filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
@@ -246,9 +252,25 @@ function trainingSameWorkArea(payload){
   return Boolean(origin)&&origin===dest;
 }
 function requiresOpinetPrice(payload){ return Boolean(currentVehicleSpec().evidence)&&!payload.public_vehicle&&!trainingSameWorkArea(payload); }
+function requiresHydrogenPrice(payload){ return currentVehicleSpec().unit==="km/kg"&&!payload.public_vehicle&&!trainingSameWorkArea(payload); }
 function updateManualPriceVisibility(){
   const payload=basePayload();
-  $("manualPriceWrap").classList.toggle("hidden",!($("travel_date").value===seoulToday()&&requiresOpinetPrice(payload)));
+  const hydrogen=requiresHydrogenPrice(payload);
+  const sameDayOpinet=$("travel_date").value===seoulToday()&&requiresOpinetPrice(payload);
+  const show=hydrogen||sameDayOpinet;
+  $("manualPriceWrap").classList.toggle("hidden",!show);
+  if(!show)return;
+  if(hydrogen){
+    $("manualPriceTitle").textContent="수소 충전단가";
+    $("manualPriceLabel").textContent="적용 수소단가 (원/kg)";
+    $("manual_energy_price").placeholder="예: 9900";
+    $("manualPriceHelp").textContent="지역별 편차가 커 자동단가를 적용하지 않습니다 · 실제 또는 확인 가능한 지역 단가 입력";
+  }else{
+    $("manualPriceTitle").textContent="당일 출장 유가";
+    $("manualPriceLabel").textContent="적용 유가 (원/L)";
+    $("manual_energy_price").placeholder="예: 1860.58";
+    $("manualPriceHelp").textContent="당일 오피넷 평균가는 미제공 · 직접 입력";
+  }
 }
 
 function selectedParticipant(){
@@ -359,14 +381,19 @@ $("calculateButton").addEventListener("click",async()=>{
   const payload=basePayload(),today=seoulToday();
   if(requiresOpinetPrice(payload)&&payload.travel_date>today){$("globalStatus").textContent="미래 날짜의 오피넷 유가는 조회할 수 없습니다.";return;}
   if(requiresOpinetPrice(payload)&&payload.travel_date===today&&!payload.manual_energy_price){$("globalStatus").textContent="당일 오피넷 일평균 유가는 아직 제공되지 않습니다. 적용 유가를 직접 입력해주세요.";$("manual_energy_price").focus();return;}
+  if(requiresHydrogenPrice(payload)&&!payload.manual_energy_price){$("globalStatus").textContent="수소차는 적용 수소단가(원/kg)를 직접 입력해주세요.";$("manual_energy_price").focus();return;}
   $("calculateButton").disabled=true;$("globalStatus").textContent="운임·일비·식비 계산 중...";
   try{
     const pp={...payload,distance_km:lastDistance.distance_km,one_way_distance_km:lastDistance.one_way_distance_km,province:lastDistance.province,sigungu:lastDistance.sigungu,origin_sigungu:lastDistance.origin_sigungu};
     const r=await fetch("/api/price",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pp)}),data=await r.json();if(!r.ok)throw new Error(data.detail||"여비 계산 실패");lastPayload=payload;
     $("final_round_trips").textContent=data.round_trip_count===0.5?"편도":fmt(data.round_trip_count)+"회";$("final_transport_distance").textContent=fmt(data.transport_distance_km)+" km";
     $("vehicle_spec").textContent=(data.vehicle_label||currentVehicleSpec().label)+" · "+(data.effective_efficiency||currentVehicleSpec().efficiency)+" "+(data.efficiency_unit||currentVehicleSpec().unit);
-    $("fuel_price_date").textContent=data.fuel_price_date?data.fuel_price_date+" · "+(data.evidence_status==="manual_price"?"수동입력":"출장 첫째 날"):"해당 없음";
-    $("price").textContent=data.energy_price==null?"해당 없음 / 연결 예정":fmt(data.energy_price)+" 원";$("formula").textContent=data.calculation_formula||"-";
+    let basisLabel="출장 첫째 날";
+    if(data.evidence_status==="manual_price") basisLabel="수동입력";
+    else if(data.evidence_status==="manual_hydrogen_price") basisLabel="수소단가 직접입력";
+    else if(data.evidence_status==="official_ev_rate") basisLabel="기준요금 시행일";
+    $("fuel_price_date").textContent=data.fuel_price_date?data.fuel_price_date+" · "+basisLabel:"해당 없음";
+    $("price").textContent=data.energy_price==null?"해당 없음":fmt(data.energy_price)+" "+currentPriceUnit();$("formula").textContent=data.calculation_formula||"-";
     $("amount").textContent=data.estimated_transport_cost==null?"단가 연결 후 계산":fmt(data.estimated_transport_cost)+" 원";
     $("daily_allowance").textContent=fmt(data.daily_allowance)+" 원";$("daily_note").textContent=data.daily_note||"-";$("meal_allowance").textContent=fmt(data.meal_allowance)+" 원";$("meal_note").textContent=data.meal_note||"-";
     $("toll_result").textContent=fmt(data.toll_fee)+" 원";$("parking_result").textContent=fmt(data.parking_fee)+" 원";$("lodging_result").textContent=fmt(data.lodging_fee)+" 원";
@@ -386,7 +413,7 @@ $("calculateButton").addEventListener("click",async()=>{
       lastEvidencePayload=null;$("evidenceButton").disabled=true;$("evidence").textContent=data.evidence_status;
     }
     $("pdfButton").disabled=false;$("regulationPdfButton").disabled=false;$("outputActions").classList.remove("hidden");$("tab2check").textContent="✓";setResultState("최종 산출 완료","done");
-    $("globalStatus").textContent="여비 계산 완료 · 오른쪽 최종 산출을 확인하고 위쪽에서 여비신청서를 생성하세요.";
+    $("globalStatus").textContent="여비 계산 완료 · 오른쪽 최종 산출을 확인하고 여비신청서를 생성하세요.";
   }catch(e){$("globalStatus").textContent=e.message;}finally{$("calculateButton").disabled=false;}
 });
 
