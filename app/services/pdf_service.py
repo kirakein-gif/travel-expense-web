@@ -4,7 +4,7 @@ import base64
 import html
 import re
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from playwright.async_api import async_playwright
@@ -244,6 +244,92 @@ def _rate_won(value) -> str:
     return f"{int(value):,}원"
 
 
+def _regulation_movement_rows(
+    req: TravelRequest,
+    result: EstimateResponse,
+) -> list[dict]:
+    """Build one row per actual one-way movement for the regulation-style form."""
+    start = req.travel_date
+    end = req.end_date or start
+    origin_name = result.resolved_origin_name or req.origin
+    destination_name = result.resolved_destination_name or req.destination
+    one_way_km = float(result.one_way_distance_km or 0)
+
+    unit_cost = int(result.transport_unit_cost or 0)
+    if result.round_trip_count == 0.5:
+        leg_cost = unit_cost
+    else:
+        leg_cost = unit_cost / 2
+
+    rows: list[dict] = []
+
+    def add(day_label: str, departure: str, arrival: str):
+        rows.append(
+            {
+                "date": day_label,
+                "departure": departure,
+                "arrival": arrival,
+                "distance_km": one_way_km,
+                "fuel_cost": leg_cost,
+            }
+        )
+
+    if req.trip_type != "training":
+        if req.round_trip:
+            current = start
+            while current <= end:
+                day = current.isoformat()
+                add(day, origin_name, destination_name)
+                add(day, destination_name, origin_name)
+                current += timedelta(days=1)
+        else:
+            add(start.isoformat(), origin_name, destination_name)
+        return rows
+
+    if req.training_stay_mode == "nonresidential":
+        current = start
+        while current <= end:
+            day = current.isoformat()
+            add(day, origin_name, destination_name)
+            add(day, destination_name, origin_name)
+            current += timedelta(days=1)
+        return rows
+
+    if req.training_stay_mode == "residential":
+        add(start.isoformat(), origin_name, destination_name)
+        add(end.isoformat(), destination_name, origin_name)
+        return rows
+
+    # Mixed training currently stores a round-trip count but not exact stay dates.
+    # Preserve known first/last dates and label intermediate legs as "기간 중"
+    # rather than inventing dates.
+    round_trips = max(1, int(result.round_trip_count or req.training_round_trips or 1))
+    total_legs = round_trips * 2
+    for index in range(total_legs):
+        is_outbound = index % 2 == 0
+        if index == 0:
+            day_label = start.isoformat()
+        elif index == total_legs - 1:
+            day_label = end.isoformat()
+        else:
+            day_label = "기간 중"
+        add(
+            day_label,
+            origin_name if is_outbound else destination_name,
+            destination_name if is_outbound else origin_name,
+        )
+    return rows
+
+
+def _won_exact(value: int | float | None) -> str:
+    if value is None:
+        return "-"
+    number = float(value)
+    if number.is_integer():
+        return f"{int(number):,}원"
+    return f"{number:,.1f}원"
+
+
 async def generate_regulation_pdf(
     req: TravelRequest,
     result: EstimateResponse,
@@ -252,11 +338,7 @@ async def generate_regulation_pdf(
     evidence_path: str | None = None,
     evidence_error: str | None = None,
 ) -> str:
-    """Generate a simplified regulation-style domestic travel settlement PDF.
-
-    The layout follows the official application's major sections, while
-    intentionally omitting rail/ship/air/bus rows that this app does not use.
-    """
+    """Generate a simplified regulation-style domestic travel settlement PDF."""
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     evidence_uri = _image_data_uri(evidence_path)
@@ -285,6 +367,20 @@ async def generate_regulation_pdf(
         f"{application_date.year}년 {application_date.month}월 {application_date.day}일"
     )
 
+    movement_rows = _regulation_movement_rows(req, result)
+    movement_html = "".join(
+        "<tr>"
+        f'<td>{_e(row["date"])}</td>'
+        f'<td>{_e(row["departure"])}</td>'
+        f'<td>{_e(row["arrival"])}</td>'
+        f'<td>{_num(row["distance_km"])} km</td>'
+        f'<td class="money">{_won_exact(row["fuel_cost"])}</td>'
+        "</tr>"
+        for row in movement_rows
+    )
+    movement_count = len(movement_rows)
+    dense_class = " dense" if movement_count > 8 else ""
+
     if evidence_uri:
         evidence_block = f'<img class="evidence-img" src="{evidence_uri}" alt="오피넷 증빙">'
         evidence_status = "오피넷 공식 화면 확인 완료"
@@ -301,77 +397,89 @@ async def generate_regulation_pdf(
 <head>
 <meta charset="utf-8">
 <style>
-  @page {{ size: A4; margin: 8mm 9mm; }}
+  @page {{ size: A4; margin: 9mm 10mm; }}
   * {{ box-sizing: border-box; }}
   body {{
     margin: 0;
     font-family: "Noto Sans CJK KR", "Noto Sans KR", "Malgun Gothic", sans-serif;
     color: #111;
-    font-size: 11.2px;
+    font-size: 12.4px;
   }}
-  .page {{ min-height: 281mm; position: relative; }}
+  .page {{ min-height: 279mm; position: relative; }}
   .page.break {{ page-break-after: always; }}
-  .form-note {{ font-size: 9.5px; margin: 0 0 1.5mm; color: #555; }}
+  .form-note {{ font-size: 10.5px; margin: 0 0 2mm; color: #555; }}
   h1 {{
-    margin: 0 0 3mm;
+    margin: 0 0 4mm;
     text-align: center;
-    font-size: 22px;
-    letter-spacing: .12em;
+    font-size: 24px;
+    letter-spacing: .11em;
   }}
   table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
   th, td {{
     border: 1px solid #222;
-    padding: 1.45mm 1.6mm;
+    padding: 2.05mm 1.8mm;
     vertical-align: middle;
-    line-height: 1.38;
+    line-height: 1.42;
+    text-align: center;
   }}
-  th {{ text-align: center; font-weight: 700; background: #fafafa; }}
+  th {{ font-weight: 750; background: #fafafa; }}
   td {{ word-break: keep-all; overflow-wrap: anywhere; }}
-  .top th {{ width: 10.5%; }}
-  .center {{ text-align: center; }}
-  .money {{ text-align: right; font-weight: 700; white-space: nowrap; }}
-  .basis {{ color: #333; font-size: 10.2px; }}
-  .sum-label {{ font-size: 13px; letter-spacing: .16em; }}
-  .sum-money {{ text-align: right; font-size: 15px; font-weight: 800; }}
-  .declaration {{
-    margin-top: 4mm;
-    line-height: 1.75;
-    font-size: 11.2px;
-    text-align: left;
+  .top td, .info td {{ font-weight: 500; }}
+  .section-title {{
+    margin: 4mm 0 1.5mm;
+    font-size: 13.5px;
+    font-weight: 800;
   }}
-  .attachment {{ margin-top: 1.5mm; font-size: 10.7px; }}
-  .application-date {{ margin-top: 3.5mm; text-align: center; font-size: 11.5px; }}
+  .move-table th {{ background: #f5f5f5; }}
+  .move-table td {{ padding-top: 1.75mm; padding-bottom: 1.75mm; }}
+  .move-table.dense td, .move-table.dense th {{
+    padding-top: 1.15mm;
+    padding-bottom: 1.15mm;
+    font-size: 11.2px;
+  }}
+  .money {{ text-align: center; font-weight: 750; white-space: nowrap; }}
+  .basis {{ color: #333; font-size: 11.6px; }}
+  .sum-label {{ font-size: 14px; letter-spacing: .16em; }}
+  .sum-money {{ text-align: center; font-size: 16px; font-weight: 850; }}
+  .declaration {{
+    margin-top: 5mm;
+    line-height: 1.8;
+    font-size: 12.3px;
+    text-align: center;
+  }}
+  .attachment {{ margin-top: 2mm; font-size: 11.5px; text-align: center; }}
+  .application-date {{ margin-top: 4mm; text-align: center; font-size: 12.4px; }}
   .signature-block {{
-    margin-top: 2.5mm;
+    margin-top: 3mm;
     page-break-inside: avoid;
     break-inside: avoid;
-    font-size: 12px;
+    font-size: 12.8px;
   }}
   .sign-row {{
-    min-height: 7mm;
+    min-height: 8mm;
     display: flex;
     justify-content: flex-end;
     align-items: center;
     gap: 3mm;
   }}
   .co-sign-row {{
-    min-height: 7mm;
+    min-height: 8mm;
     display: flex;
     justify-content: flex-end;
     align-items: flex-start;
     gap: 3mm;
     padding-top: .5mm;
   }}
-  .sign-label {{ font-weight: 700; flex: 0 0 auto; }}
+  .sign-label {{ font-weight: 750; flex: 0 0 auto; }}
   .passenger-signs {{
     display: flex;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 1.5mm 6mm;
+    gap: 1.8mm 7mm;
     max-width: 82%;
   }}
   .passenger-sign {{ white-space: nowrap; }}
-  .page2-title {{ margin-bottom: 3mm; }}
+  .page2-title {{ margin-bottom: 4mm; }}
   .page2-head {{
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -380,13 +488,13 @@ async def generate_regulation_pdf(
   }}
   .evidence-basis {{
     border: 1px solid #777;
-    padding: 3mm;
-    min-height: 28mm;
-    line-height: 1.55;
-    font-size: 10.8px;
+    padding: 3.5mm;
+    min-height: 30mm;
+    line-height: 1.6;
+    font-size: 12px;
   }}
   .evidence-wrap {{
-    height: 219mm;
+    height: 214mm;
     border: 1px solid #999;
     padding: 2mm;
     display: flex;
@@ -401,7 +509,7 @@ async def generate_regulation_pdf(
     color: #555;
     line-height: 1.8;
     padding: 18mm;
-    font-size: 11.5px;
+    font-size: 12.2px;
   }}
   .footer {{
     position: absolute;
@@ -410,7 +518,7 @@ async def generate_regulation_pdf(
     right: 0;
     text-align: center;
     color: #777;
-    font-size: 9px;
+    font-size: 9.5px;
   }}
 </style>
 </head>
@@ -442,75 +550,15 @@ async def generate_regulation_pdf(
       </tr>
     </table>
 
-    <table style="margin-top:2.5mm">
+    <div class="section-title">출장 및 이동내역</div>
+    <table class="info">
       <colgroup>
-        <col style="width:12%">
-        <col style="width:13%">
-        <col style="width:17%">
-        <col style="width:12%">
-        <col style="width:15%">
-        <col style="width:14%">
-        <col style="width:17%">
-      </colgroup>
-      <tr>
-        <th rowspan="2">일비</th>
-        <th>단가</th><td class="center">{_rate_won(DAILY_ALLOWANCE_RATE)}</td>
-        <th>일수</th><td class="center">{result.trip_days}일</td>
-        <th>산출액</th><td class="money">{_won(result.daily_allowance)}</td>
-      </tr>
-      <tr>
-        <th>산출근거</th><td colspan="5" class="basis">{_e(result.daily_note)}</td>
-      </tr>
-      <tr>
-        <th rowspan="2">식비</th>
-        <th>단가</th><td class="center">{_rate_won(MEAL_ALLOWANCE_RATE)}</td>
-        <th>일수</th><td class="center">{result.trip_days}일</td>
-        <th>산출액</th><td class="money">{_won(result.meal_allowance)}</td>
-      </tr>
-      <tr>
-        <th>산출근거</th><td colspan="5" class="basis">{_e(result.meal_note)}</td>
-      </tr>
-
-      <tr>
-        <th rowspan="3">자동차<br>운임</th>
-        <th>연료비</th>
-        <td colspan="4" class="basis">{_e(result.calculation_formula)}</td>
-        <td class="money">{_won(result.estimated_transport_cost)}</td>
-      </tr>
-      <tr>
-        <th>통행료</th>
-        <td colspan="4" class="basis">직접 입력</td>
-        <td class="money">{_won(result.toll_fee)}</td>
-      </tr>
-      <tr>
-        <th>주차료</th>
-        <td colspan="4" class="basis">직접 입력</td>
-        <td class="money">{_won(result.parking_fee)}</td>
-      </tr>
-
-      <tr>
-        <th>숙박비</th>
-        <th>숙박시설</th>
-        <td colspan="4" class="basis">직접 입력</td>
-        <td class="money">{_won(result.lodging_fee)}</td>
-      </tr>
-
-      <tr>
-        <th colspan="6" class="sum-label">합&nbsp;&nbsp;&nbsp;&nbsp;계</th>
-        <td class="sum-money">{_won(result.total_expense)}</td>
-      </tr>
-    </table>
-
-    <table style="margin-top:2.5mm">
-      <colgroup>
-        <col style="width:14%">
-        <col style="width:36%">
-        <col style="width:14%">
-        <col style="width:36%">
+        <col style="width:14%"><col style="width:36%">
+        <col style="width:14%"><col style="width:36%">
       </colgroup>
       <tr>
         <th>출발지</th><td>{_e(origin)}</td>
-        <th>출장지 확인</th><td>{_e(destination)}</td>
+        <th>출장지</th><td>{_e(destination)}</td>
       </tr>
       <tr>
         <th>거리 기준</th><td>{_e(result.distance_source)}</td>
@@ -518,7 +566,75 @@ async def generate_regulation_pdf(
       </tr>
       <tr>
         <th>유가 기준일</th><td>{_e(price_date)}</td>
-        <th>적용단가</th><td>{_won(result.energy_price)}</td>
+        <th>적용단가</th><td>{_won_exact(result.energy_price)}</td>
+      </tr>
+    </table>
+
+    <table class="move-table{dense_class}" style="margin-top:2mm">
+      <colgroup>
+        <col style="width:17%">
+        <col style="width:25%">
+        <col style="width:25%">
+        <col style="width:15%">
+        <col style="width:18%">
+      </colgroup>
+      <tr>
+        <th>일자</th>
+        <th>출발지</th>
+        <th>도착지</th>
+        <th>거리</th>
+        <th>연료비</th>
+      </tr>
+      {movement_html}
+      <tr>
+        <th colspan="4">연료비 합계</th>
+        <td class="money">{_won(result.estimated_transport_cost)}</td>
+      </tr>
+    </table>
+
+    <div class="section-title">여비 지급내역</div>
+    <table class="money-table">
+      <colgroup>
+        <col style="width:13%">
+        <col style="width:14%">
+        <col style="width:19%">
+        <col style="width:12%">
+        <col style="width:16%">
+        <col style="width:12%">
+        <col style="width:14%">
+      </colgroup>
+      <tr>
+        <th rowspan="2">일비</th>
+        <th>단가</th><td>{_rate_won(DAILY_ALLOWANCE_RATE)}</td>
+        <th>일수</th><td>{result.trip_days}일</td>
+        <th>산출액</th><td class="money">{_won(result.daily_allowance)}</td>
+      </tr>
+      <tr>
+        <th>산출근거</th><td colspan="5" class="basis">{_e(result.daily_note)}</td>
+      </tr>
+      <tr>
+        <th rowspan="2">식비</th>
+        <th>단가</th><td>{_rate_won(MEAL_ALLOWANCE_RATE)}</td>
+        <th>일수</th><td>{result.trip_days}일</td>
+        <th>산출액</th><td class="money">{_won(result.meal_allowance)}</td>
+      </tr>
+      <tr>
+        <th>산출근거</th><td colspan="5" class="basis">{_e(result.meal_note)}</td>
+      </tr>
+      <tr>
+        <th>자동차운임</th>
+        <th>연료비</th><td class="money">{_won(result.estimated_transport_cost)}</td>
+        <th>통행료</th><td class="money">{_won(result.toll_fee)}</td>
+        <th>주차료</th><td class="money">{_won(result.parking_fee)}</td>
+      </tr>
+      <tr>
+        <th>숙박비</th>
+        <td colspan="5">숙박시설 · 직접 입력</td>
+        <td class="money">{_won(result.lodging_fee)}</td>
+      </tr>
+      <tr>
+        <th colspan="6" class="sum-label">합&nbsp;&nbsp;&nbsp;&nbsp;계</th>
+        <td class="sum-money">{_won(result.total_expense)}</td>
       </tr>
     </table>
 
@@ -546,7 +662,7 @@ async def generate_regulation_pdf(
       </div>
       <div class="evidence-basis">
         <b>유가 및 자동차운임</b><br>
-        기준일 {_e(price_date)} / {_won(result.energy_price)}<br>
+        기준일 {_e(price_date)} / {_won_exact(result.energy_price)}<br>
         {_e(result.calculation_formula)}
       </div>
     </div>
