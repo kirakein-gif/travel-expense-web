@@ -171,7 +171,9 @@ def _formula(
     if round_trip_count == 1:
         return base
 
-    if trip_type == "training" and training_stay_mode == "nonresidential" and int(round_trip_count) == days:
+    if int(round_trip_count) == days and (
+        trip_type != "training" or training_stay_mode == "nonresidential"
+    ):
         return f"{base} × {days}일 = {total_cost:,.0f}원"
 
     return f"{base} × {round_trip_count:g}회 = {total_cost:,.0f}원"
