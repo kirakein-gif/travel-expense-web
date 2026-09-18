@@ -141,7 +141,7 @@ async def generate_estimate_pdf(
   .co-sign-row {{ min-height: 8mm; display: flex; justify-content: flex-end; align-items: flex-start; gap: 3mm; padding-top: 1mm; }}
   .sign-label {{ font-weight: 700; flex: 0 0 auto; }}
   .passenger-signs {{ display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 2mm 7mm; max-width: 82%; }}
-  .passenger-sign {{ white-space: nowrap; }}
+  .passenger-sign {{ white-space: nowrap; font-size: 14px; }}
   .page2-head {{ display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-bottom: 3mm; }}
   .basis {{ border: 1px solid #cbd5e1; padding: 3mm; line-height: 1.6; min-height: 27mm; font-size: 11.5px; }}
   .evidence-wrap {{ height: 218mm; border: 1px solid #cbd5e1; padding: 2mm; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; }}
@@ -435,6 +435,8 @@ async def generate_regulation_pdf(
         result.resolved_destination_address,
         req.destination,
     )
+    origin_address = result.resolved_origin_address or req.origin
+    destination_address = result.resolved_destination_address or req.destination
     price_date = result.fuel_price_date.isoformat() if result.fuel_price_date else "-"
     application_date = datetime.now(ZoneInfo("Asia/Seoul")).date()
     application_date_ko = (
@@ -523,12 +525,17 @@ async def generate_regulation_pdf(
     text-align: center;
   }}
   .attachment {{ margin-top: 2mm; font-size: 11.5px; text-align: center; }}
-  .application-date {{ margin-top: 4mm; text-align: center; font-size: 12.4px; }}
+  .application-date {{
+    margin-top: 4mm;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 650;
+  }}
   .signature-block {{
-    margin-top: 3mm;
+    margin-top: 3.2mm;
     page-break-inside: avoid;
     break-inside: avoid;
-    font-size: 12.8px;
+    font-size: 14px;
   }}
   .sign-row {{
     min-height: 8mm;
@@ -543,9 +550,10 @@ async def generate_regulation_pdf(
     justify-content: flex-end;
     align-items: flex-start;
     gap: 3mm;
+    margin-top: 1.8mm;
     padding-top: .5mm;
   }}
-  .sign-label {{ font-weight: 750; flex: 0 0 auto; }}
+  .sign-label {{ font-weight: 800; flex: 0 0 auto; font-size: 14.2px; }}
   .passenger-signs {{
     display: flex;
     justify-content: flex-end;
@@ -587,18 +595,21 @@ async def generate_regulation_pdf(
     font-size: 10.7px;
   }}
   .compact-page .application-date {{
-    margin-top: 1.3mm;
-    font-size: 11.5px;
+    margin-top: 1.1mm;
+    font-size: 12.8px;
+    font-weight: 650;
   }}
   .compact-page .signature-block {{
-    margin-top: 1mm;
-    font-size: 11.5px;
+    margin-top: .8mm;
+    font-size: 12.8px;
   }}
   .compact-page .sign-row,
   .compact-page .co-sign-row {{
     min-height: 4.2mm;
   }}
-  .compact-page .co-sign-row {{ padding-top: 0; }}
+  .compact-page .co-sign-row {{ margin-top: .9mm; padding-top: 0; }}
+  .compact-page .sign-label {{ font-size: 13px; }}
+  .compact-page .passenger-sign {{ font-size: 12.8px; }}
   .compact-page .passenger-signs {{
     gap: .5mm 4mm;
     max-width: 86%;
@@ -682,8 +693,8 @@ async def generate_regulation_pdf(
         <col style="width:14%"><col style="width:36%">
       </colgroup>
       <tr>
-        <th>출발지</th><td>{_e(origin)}</td>
-        <th>출장지</th><td>{_e(destination)}</td>
+        <th>출발주소</th><td>{_e(origin_address)}</td>
+        <th>도착주소</th><td>{_e(destination_address)}</td>
       </tr>
       <tr>
         <th>거리 기준</th><td>{_e(result.distance_source)}</td>
