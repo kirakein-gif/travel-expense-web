@@ -54,7 +54,7 @@
       </section>
 
       <div class="sidebar-meta">
-        <strong>v1.22 MOBILE ACTION</strong>
+        <strong>v1.23 EV RATE HISTORY</strong>
         <span>제작자: 천안버들유치원 나대현</span>
       </div>
     </aside>
@@ -174,12 +174,12 @@
               <label class="check check-with-note"><input id="public_vehicle" type="checkbox"><span>공용차량 이용</span><span class="check-inline-note">공용차량: 일비 50% 감액 · 운임 미지급</span></label>
 
               <div id="manualPriceWrap" class="hidden">
-                <div class="section-label">당일 출장 유가</div>
+                <div id="manualPriceTitle" class="section-label">당일 출장 유가</div>
                 <div class="form-row form-row-help">
-                  <label for="manual_energy_price">적용 유가 (원/L)</label>
+                  <label id="manualPriceLabel" for="manual_energy_price">적용 유가 (원/L)</label>
                   <div>
                     <input id="manual_energy_price" type="number" min="0.01" step="0.01" placeholder="예: 1860.58">
-                    <span class="help compact-help">당일 오피넷 평균가는 미제공 · 직접 입력</span>
+                    <span id="manualPriceHelp" class="help compact-help">당일 오피넷 평균가는 미제공 · 직접 입력</span>
                   </div>
                 </div>
               </div>
@@ -277,12 +277,12 @@
                   <div><dt>주차료</dt><dd id="parking_result">-</dd></div>
                   <div><dt>숙박비</dt><dd id="lodging_result">-</dd></div>
                   <div><dt>차량·연비</dt><dd id="vehicle_spec">-</dd></div>
-                  <div><dt>유가 기준일</dt><dd id="fuel_price_date">-</dd></div>
+                  <div><dt>단가 기준일</dt><dd id="fuel_price_date">-</dd></div>
                   <div><dt>적용단가</dt><dd id="price">-</dd></div>
                   <div class="wide-value"><dt>운임 산식</dt><dd id="formula" class="formula">-</dd></div>
                   <div class="wide-value"><dt>일비 근거</dt><dd id="daily_note" class="note-value">-</dd></div>
                   <div class="wide-value"><dt>식비 근거</dt><dd id="meal_note" class="note-value">-</dd></div>
-                  <div><dt>가격출처</dt><dd id="source">-</dd></div>
+                  <div><dt>단가 출처</dt><dd id="source">-</dd></div>
                   <div><dt>증빙상태</dt><dd id="evidence">-</dd></div>
                 </dl>
               </div>
