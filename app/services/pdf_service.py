@@ -507,6 +507,31 @@ async def generate_regulation_pdf(
         )
         evidence_status = reason
 
+    if result.efficiency_unit == "km/kWh":
+        evidence_detail_html = (
+            '<div class="compact-evidence">'
+            '<b>공식 기준단가 자동 적용</b><br>'
+            f'무공해차 통합누리집 공공 급속충전요금 이력 기준 · '
+            f'{_e(price_date)} / {_e(_unit_price_text(result))}<br>'
+            f'<span class="compact-source">{_e(result.price_source)}</span>'
+            '</div>'
+        )
+    elif result.efficiency_unit == "km/kg":
+        evidence_detail_html = (
+            '<div class="compact-evidence">'
+            '<b>수소단가 직접입력</b><br>'
+            f'적용단가 {_e(_unit_price_text(result))} · '
+            '지역별 가격 편차를 고려한 사용자 직접입력값<br>'
+            '<span class="compact-source">별도 오피넷 화면 증빙 대상 아님</span>'
+            '</div>'
+        )
+    else:
+        evidence_detail_html = (
+            f'<div class="basis" style="margin-bottom:2mm">'
+            f'증빙상태: {_e(evidence_status)}</div>'
+            f'<div class="evidence-wrap">{evidence_block}</div>'
+        )
+
     body = f"""
 <!doctype html>
 <html lang="ko">
@@ -686,6 +711,21 @@ async def generate_regulation_pdf(
     padding: 18mm;
     font-size: 12.2px;
   }}
+  .compact-evidence {{
+    border: 1px solid #999;
+    background: #fafafa;
+    padding: 4mm 5mm;
+    line-height: 1.65;
+    font-size: 12px;
+    color: #222;
+  }}
+  .compact-evidence b {{
+    font-size: 12.8px;
+  }}
+  .compact-source {{
+    color: #555;
+    font-size: 11.3px;
+  }}
   .footer {{
     position: absolute;
     bottom: 0;
@@ -848,8 +888,7 @@ async def generate_regulation_pdf(
         {_e(result.calculation_formula)}
       </div>
     </div>
-    <div class="basis" style="margin-bottom:2mm">증빙상태: {_e(evidence_status)}</div>
-    <div class="evidence-wrap">{evidence_block}</div>
+    {evidence_detail_html}
     <div class="footer">2 / 2 · 규정서식 간소형</div>
   </section>
 </body>
