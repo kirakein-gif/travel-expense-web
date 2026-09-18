@@ -48,14 +48,8 @@
         </div>
       </section>
 
-      <section id="outputActions" class="side-card output-card hidden">
-        <div class="side-title">증빙·출력</div>
-        <div class="side-note">여비 계산이 완료되면 아래 버튼이 활성화됩니다.</div>
-        <button id="evidenceButton" type="button" disabled class="teal">오피넷 증빙 생성</button>
-        <button id="pdfButton" type="button" disabled class="dark">2페이지 여비신청서 PDF</button>
-      </section>
       <div class="sidebar-meta">
-        <strong>v1.10 ONE SCREEN</strong>
+        <strong>v1.11 RESULT SECTIONS</strong>
         <span>제작자: 천안버들유치원 나대현</span>
       </div>
     </aside>
@@ -212,6 +206,11 @@
         </div>
 
         <aside class="result-column">
+          <section id="outputActions" class="result-actions hidden">
+            <button id="evidenceButton" type="button" disabled class="teal">오피넷 증빙 생성</button>
+            <button id="pdfButton" type="button" disabled class="dark">2페이지 여비신청서 PDF</button>
+          </section>
+
           <section class="card result unified-result">
             <div class="result-head">
               <div>
@@ -221,10 +220,10 @@
               <span id="resultState" class="result-state">입력 대기</span>
             </div>
 
-            <div class="hint result-guide">거리 확인 후 관외 대상 여부를 판정하고, 여비 계산 후 최종 금액을 표시합니다.</div>
+            <div class="hint result-guide">관외 대상 여부와 최종 금액을 먼저 확인하고, 필요한 항목만 펼쳐서 세부내역을 확인하세요.</div>
             <div id="scopeAlert" class="scope-alert hidden"></div>
 
-            <section class="money-summary" aria-label="여비 요약">
+            <section class="money-summary" aria-label="총 여비">
               <div class="total-summary">
                 <span>총 여비</span>
                 <strong id="total_expense">-</strong>
@@ -237,48 +236,55 @@
               </div>
             </section>
 
-            <section class="result-section">
-              <h3>출장·거리</h3>
-              <dl>
-                <div class="wide-value"><dt>출발지</dt><dd id="resolved_origin">-</dd></div>
-                <div class="wide-value"><dt>출장지</dt><dd id="resolved_destination">-</dd></div>
-                <div><dt>관외 판정구역</dt><dd id="jurisdiction_pair">-</dd></div>
-                <div><dt>관외 판정거리</dt><dd id="eligibility_round_trip">-</dd></div>
-                <div><dt>관외여비 판정</dt><dd id="outside_eligibility">-</dd></div>
-                <div><dt>편도 기준거리</dt><dd id="one_way_distance">-</dd></div>
-                <div><dt>거리 기준</dt><dd id="distance_source">-</dd></div>
-                <div><dt>기준 목적지</dt><dd id="destination_code">-</dd></div>
-              </dl>
-            </section>
+            <details class="result-block">
+              <summary>
+                <div>
+                  <strong>출장·거리</strong>
+                  <span id="trip_summary">거리 확인 전</span>
+                </div>
+                <em>세부보기</em>
+              </summary>
+              <div class="result-block-body">
+                <dl>
+                  <div class="wide-value"><dt>출발지</dt><dd id="resolved_origin">-</dd></div>
+                  <div class="wide-value"><dt>출장지</dt><dd id="resolved_destination">-</dd></div>
+                  <div><dt>편도 기준거리</dt><dd id="one_way_distance">-</dd></div>
+                  <div><dt>거리 기준</dt><dd id="distance_source">-</dd></div>
+                  <div><dt>기준 목적지</dt><dd id="destination_code">-</dd></div>
+                </dl>
+              </div>
+            </details>
 
-            <section class="result-section">
-              <h3>여비 산출</h3>
-              <dl>
-                <div><dt>출장일수</dt><dd id="preview_days">-</dd></div>
-                <div><dt>출장유형</dt><dd id="preview_type">-</dd></div>
-                <div><dt>왕복 횟수</dt><dd id="final_round_trips">-</dd></div>
-                <div><dt>적용거리</dt><dd id="final_transport_distance">-</dd></div>
-                <div class="key-money"><dt>자동차운임</dt><dd id="amount">-</dd></div>
-                <div class="key-money"><dt>일비</dt><dd id="daily_allowance">-</dd></div>
-                <div class="key-money"><dt>식비</dt><dd id="meal_allowance">-</dd></div>
-                <div><dt>통행료</dt><dd id="toll_result">-</dd></div>
-                <div><dt>주차료</dt><dd id="parking_result">-</dd></div>
-                <div><dt>숙박비</dt><dd id="lodging_result">-</dd></div>
-              </dl>
-            </section>
-
-            <details class="result-details">
-              <summary>세부 산출근거 보기</summary>
-              <dl>
-                <div><dt>차량·연비</dt><dd id="vehicle_spec">-</dd></div>
-                <div><dt>유가 기준일</dt><dd id="fuel_price_date">-</dd></div>
-                <div><dt>적용단가</dt><dd id="price">-</dd></div>
-                <div class="wide-value"><dt>자동차운임 산식</dt><dd id="formula" class="formula">-</dd></div>
-                <div class="wide-value"><dt>일비 근거</dt><dd id="daily_note" class="note-value">-</dd></div>
-                <div class="wide-value"><dt>식비 근거</dt><dd id="meal_note" class="note-value">-</dd></div>
-                <div><dt>가격출처</dt><dd id="source">-</dd></div>
-                <div><dt>증빙상태</dt><dd id="evidence">-</dd></div>
-              </dl>
+            <details class="result-block">
+              <summary>
+                <div>
+                  <strong>여비 산출</strong>
+                  <span id="fare_summary">여비 계산 전</span>
+                </div>
+                <em>세부보기</em>
+              </summary>
+              <div class="result-block-body">
+                <dl>
+                  <div><dt>출장일수</dt><dd id="preview_days">-</dd></div>
+                  <div><dt>출장유형</dt><dd id="preview_type">-</dd></div>
+                  <div><dt>왕복 횟수</dt><dd id="final_round_trips">-</dd></div>
+                  <div><dt>적용거리</dt><dd id="final_transport_distance">-</dd></div>
+                  <div class="key-money"><dt>자동차운임</dt><dd id="amount">-</dd></div>
+                  <div class="key-money"><dt>일비</dt><dd id="daily_allowance">-</dd></div>
+                  <div class="key-money"><dt>식비</dt><dd id="meal_allowance">-</dd></div>
+                  <div><dt>통행료</dt><dd id="toll_result">-</dd></div>
+                  <div><dt>주차료</dt><dd id="parking_result">-</dd></div>
+                  <div><dt>숙박비</dt><dd id="lodging_result">-</dd></div>
+                  <div><dt>차량·연비</dt><dd id="vehicle_spec">-</dd></div>
+                  <div><dt>유가 기준일</dt><dd id="fuel_price_date">-</dd></div>
+                  <div><dt>적용단가</dt><dd id="price">-</dd></div>
+                  <div class="wide-value"><dt>자동차운임 산식</dt><dd id="formula" class="formula">-</dd></div>
+                  <div class="wide-value"><dt>일비 근거</dt><dd id="daily_note" class="note-value">-</dd></div>
+                  <div class="wide-value"><dt>식비 근거</dt><dd id="meal_note" class="note-value">-</dd></div>
+                  <div><dt>가격출처</dt><dd id="source">-</dd></div>
+                  <div><dt>증빙상태</dt><dd id="evidence">-</dd></div>
+                </dl>
+              </div>
             </details>
           </section>
         </aside>
