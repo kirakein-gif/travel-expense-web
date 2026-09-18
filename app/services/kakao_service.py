@@ -31,6 +31,9 @@ BUSINESS_WORDS = (
     "편의점", "부동산", "약국",
 )
 PUBLIC_CATEGORY_WORDS = ("사회,공공기관", "공공기관", "교육", "학교")
+AUXILIARY_PLACE_WORDS = (
+    "ic", "나들목", "교차로", "주차장", "정류장", "입구", "매표소", "휴게소",
+)
 
 # Normalize common official/colloquial administrative names for comparison.
 # City-level replacements intentionally keep the trailing "시" so that
@@ -172,25 +175,67 @@ def _region_from_address_text(address_name: str) -> tuple[str, str]:
     return province, sigungu
 
 
+def _candidate_query_variants(query: str, doc: dict) -> list[str]:
+    """Treat a leading region name as a search hint, not part of the place name.
+
+    Example: '아산 현충사' should compare '현충사' directly with the candidate
+    place name when the candidate address is in 아산시.
+    """
+    base = re.sub(r"\s+", " ", (query or "").strip())
+    variants = [base]
+    tokens = base.split(" ")
+    if len(tokens) < 2:
+        return variants
+
+    address = doc.get("address_name") or doc.get("road_address_name") or ""
+    province, sigungu = _region_from_address_text(address)
+    region_tokens: set[str] = set()
+
+    for value in (province, sigungu):
+        for token in (value or "").split():
+            if not token:
+                continue
+            region_tokens.add(_compact(token))
+            if token.endswith(("시", "군", "구", "도")) and len(token) > 1:
+                region_tokens.add(_compact(token[:-1]))
+
+    first = _compact(tokens[0])
+    if first in region_tokens:
+        remainder = " ".join(tokens[1:]).strip()
+        if remainder:
+            variants.append(remainder)
+
+    return _unique(variants)
+
+
 def _keyword_score(query: str, doc: dict, index: int) -> float:
-    target = _name_key(query)
-    raw_target = _compact(query)
     name = _name_key(doc.get("place_name", ""))
     raw_name = _compact(doc.get("place_name", ""))
     category = (doc.get("category_name") or "").lower()
 
-    # Keep Kakao's accuracy ordering as a meaningful tiebreaker.
-    score = max(0, 40 - index * 2)
+    # Kakao's accuracy order remains the baseline. Our ranking only corrects
+    # obvious entity mismatches such as a bank branch or highway IC.
+    score = max(0, 80 - index * 4)
 
-    if name == target:
-        score += 1000
-    else:
-        score += SequenceMatcher(None, target, name).ratio() * 220
+    query_variants = _candidate_query_variants(query, doc)
+    variant_scores: list[float] = []
+    for variant in query_variants:
+        target = _name_key(variant)
+        raw_target = _compact(variant)
+        local = SequenceMatcher(None, target, name).ratio() * 220
 
-        if raw_target and raw_target in raw_name:
-            score += 45
-        if raw_name and raw_name in raw_target:
-            score += 15
+        if name == target:
+            local += 1000
+        else:
+            if raw_target and raw_target in raw_name:
+                local += 45
+            if raw_name and raw_name in raw_target:
+                local += 15
+        variant_scores.append(local)
+
+    score += max(variant_scores or [0])
+    raw_target = _compact(query)
+    target = _name_key(query)
 
     public_query = any(word in raw_target for word in PUBLIC_INSTITUTION_HINTS)
     if public_query:
@@ -200,6 +245,12 @@ def _keyword_score(query: str, doc: dict, index: int) -> float:
             score -= 260
         if any(word in category for word in BUSINESS_WORDS):
             score -= 180
+
+    # Do not let an auxiliary facility win unless the user actually asked for it.
+    # This specifically prevents '아산 현충사' from selecting '아산현충사IC'.
+    for word in AUXILIARY_PLACE_WORDS:
+        if word in raw_name and word not in raw_target:
+            score -= 360
 
     # If the user named a specific institution type, a parent institution that
     # omits that type should not win merely because it is a substring.
@@ -277,7 +328,7 @@ async def geocode(query: str) -> dict:
     keyword search and a conservative post-ranking tuned for public institutions.
     """
     # v4 invalidates older 30-day cache entries produced by previous matchers.
-    cache_key = _hash_key(f"geocode-v4|{query}")
+    cache_key = _hash_key(f"geocode-v5|{query}")
 
     async def factory() -> dict:
         async with httpx.AsyncClient(timeout=20) as client:
