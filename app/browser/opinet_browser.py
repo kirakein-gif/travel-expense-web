@@ -360,6 +360,109 @@ async def _extract_region_price_table(page: Page, product_label: str) -> dict[st
     return prices
 
 
+async def _highlight_evidence_target(
+    page: Page,
+    product_label: str,
+    sigungu_name: str,
+    expected_price: float | None = None,
+) -> bool:
+    """Visually mark the region row and applied price cell for evidence screenshots."""
+    target = re.sub(r"\\s+", "", normalize_sigungu(sigungu_name))
+    if not target:
+        return False
+
+    tables = page.locator("table")
+    for ti in range(await tables.count()):
+        table = tables.nth(ti)
+        rows = table.locator("tr")
+        row_count = await rows.count()
+        if row_count < 2:
+            continue
+
+        header_row_index: Optional[int] = None
+        product_index: Optional[int] = None
+        for ri in range(min(row_count, 7)):
+            cells = rows.nth(ri).locator("th, td")
+            texts = [
+                re.sub(r"\\s+", " ", (await cells.nth(i).inner_text()).strip())
+                for i in range(await cells.count())
+            ]
+            for ci, text in enumerate(texts):
+                if product_label in text:
+                    header_row_index = ri
+                    product_index = ci
+                    break
+            if product_index is not None:
+                break
+
+        if product_index is None or header_row_index is None:
+            continue
+
+        for ri in range(header_row_index + 1, row_count):
+            row = rows.nth(ri)
+            cells = row.locator("th, td")
+            if await cells.count() <= product_index:
+                continue
+
+            row_name = re.sub(
+                r"\\s+",
+                " ",
+                (await cells.nth(0).inner_text()).strip(),
+            )
+            row_key = re.sub(r"\\s+", "", normalize_sigungu(row_name))
+            if not row_key:
+                continue
+
+            matches = (
+                row_key == target
+                or row_key.endswith(target)
+                or target.endswith(row_key)
+                or target in row_key
+            )
+            if not matches:
+                continue
+
+            price_cell = cells.nth(product_index)
+            price_value = _parse_number(await price_cell.inner_text())
+            if (
+                expected_price is not None
+                and price_value is not None
+                and abs(price_value - float(expected_price)) > 0.05
+            ):
+                continue
+
+            # Use inline !important styles only in the temporary browser DOM used
+            # for the screenshot. This does not alter OPINET source data.
+            await row.evaluate(
+                """
+                (el) => {
+                    for (const cell of el.querySelectorAll('th, td')) {
+                        cell.style.setProperty('background-color', '#fff8cc', 'important');
+                    }
+                }
+                """
+            )
+            await cells.nth(0).evaluate(
+                """
+                (el) => {
+                    el.style.setProperty('font-weight', '700', 'important');
+                }
+                """
+            )
+            await price_cell.evaluate(
+                """
+                (el) => {
+                    el.style.setProperty('background-color', '#ffe28a', 'important');
+                    el.style.setProperty('box-shadow', 'inset 0 0 0 2px #b7791f', 'important');
+                    el.style.setProperty('font-weight', '800', 'important');
+                }
+                """
+            )
+            return True
+
+    return False
+
+
 async def _prepare_oil_page(page: Page, travel_date: date, province: str, vehicle_type: str) -> None:
     await page.goto(OIL_URL, wait_until="networkidle", timeout=60_000)
     await _select_date(page, travel_date)
@@ -385,6 +488,8 @@ async def query_opinet_region_prices(
     province_name: str,
     vehicle_type: str,
     evidence_dir: str = "/tmp/evidence",
+    highlight_sigungu: str | None = None,
+    highlight_expected_price: float | None = None,
 ) -> OpinetRegionResult:
     if vehicle_type not in {"gasoline", "diesel", "lpg"}:
         raise ValueError("OPINET 조회 대상 차량이 아닙니다.")
@@ -414,6 +519,17 @@ async def query_opinet_region_prices(
             source_url = OIL_URL
 
         prices = await _extract_region_price_table(page, product_label)
+        if highlight_sigungu:
+            try:
+                await _highlight_evidence_target(
+                    page,
+                    product_label,
+                    highlight_sigungu,
+                    highlight_expected_price,
+                )
+            except Exception:
+                # Highlighting is presentation-only; never block a valid evidence capture.
+                pass
         await page.screenshot(path=str(evidence_path), full_page=True)
         await browser.close()
 
