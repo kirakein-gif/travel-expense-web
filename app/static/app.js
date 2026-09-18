@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 const fmt = n => n == null ? "-" : Number(n).toLocaleString("ko-KR");
 let lastDistance = null, lastPayload = null, lastEvidencePayload = null, importData = null, selectedTrip = null;
+let prefetchedEvidence = null, evidencePrefetchPromise = null, evidencePrefetchContext = null, evidencePrefetchSeq = 0;
 
 const VEHICLE_SPECS = {
   gasoline:{label:"휘발유",efficiency:11.97,unit:"km/L",evidence:"gasoline"},
@@ -30,6 +31,7 @@ function days(){
 function setTab(n){
   document.querySelectorAll(".side-step").forEach(b=>b.classList.toggle("active",b.dataset.tab===String(n)));
   document.querySelectorAll(".tab-panel").forEach(p=>p.classList.toggle("active",p.id==="tab"+n));
+  if(String(n)==="2" && lastDistance && lastDistance.outside_travel_eligible) startEvidencePrefetch();
   if(window.innerWidth<1100) window.scrollTo({top:0,behavior:"smooth"});
 }
 document.querySelectorAll(".side-step").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
@@ -39,6 +41,129 @@ function setResultState(text,kind){
   $("resultState").textContent=text;
   $("resultState").className="result-state"+(kind?" "+kind:"");
 }
+function setEvidencePrepStatus(text,kind){
+  const el=$("evidencePrepStatus");
+  if(!el)return;
+  el.textContent=text||"";
+  el.className="evidence-prep"+(kind?" "+kind:"")+(text?"":" hidden");
+}
+function invalidateEvidenceCache(){
+  evidencePrefetchSeq++;
+  prefetchedEvidence=null;
+  evidencePrefetchPromise=null;
+  evidencePrefetchContext=null;
+  setEvidencePrepStatus("");
+}
+function blobToDataUrl(blob){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(reader.error||new Error("증빙 이미지 변환 실패"));
+    reader.readAsDataURL(blob);
+  });
+}
+function evidenceContextKey(payload){
+  const spec=currentVehicleSpec();
+  if(!lastDistance||!spec.evidence)return null;
+  return [payload.travel_date,lastDistance.province,lastDistance.sigungu,spec.evidence].join("|");
+}
+function evidencePayloadMatches(a,b){
+  if(!a||!b)return false;
+  return a.travel_date===b.travel_date &&
+    a.vehicle_type===b.vehicle_type &&
+    a.province===b.province &&
+    a.sigungu===b.sigungu &&
+    Math.abs(Number(a.expected_price)-Number(b.expected_price))<0.011;
+}
+function evidenceCanPrefetch(payload){
+  const spec=currentVehicleSpec(),today=seoulToday();
+  return Boolean(
+    lastDistance && lastDistance.outside_travel_eligible &&
+    spec.evidence && !payload.public_vehicle &&
+    !trainingSameWorkArea(payload) &&
+    payload.travel_date && payload.travel_date<today
+  );
+}
+async function prefetchEvidenceWork(context,seq){
+  const payload=basePayload(),spec=currentVehicleSpec();
+  if(!evidenceCanPrefetch(payload))return null;
+  setEvidencePrepStatus("오피넷 증빙 준비 중…","");
+  try{
+    const pp={...payload,distance_km:lastDistance.distance_km,one_way_distance_km:lastDistance.one_way_distance_km,province:lastDistance.province,sigungu:lastDistance.sigungu,origin_sigungu:lastDistance.origin_sigungu};
+    const pr=await fetch("/api/price",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pp)});
+    const priceData=await pr.json();
+    if(!pr.ok)throw new Error(priceData.detail||"유가 조회 실패");
+    if(seq!==evidencePrefetchSeq)return null;
+    if(priceData.energy_price==null||priceData.evidence_status==="manual_price"){
+      setEvidencePrepStatus("");
+      return null;
+    }
+
+    const evidencePayload={
+      travel_date:payload.travel_date,
+      vehicle_type:spec.evidence,
+      province:lastDistance.province,
+      sigungu:lastDistance.sigungu,
+      expected_price:priceData.energy_price
+    };
+    const er=await fetch("/api/opinet-evidence.png",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(evidencePayload)});
+    if(!er.ok){const d=await er.json();throw new Error(d.detail||"증빙 생성 실패");}
+    const blob=await er.blob();
+    const dataUrl=await blobToDataUrl(blob);
+    if(seq!==evidencePrefetchSeq)return null;
+
+    prefetchedEvidence={context,dataUrl,blob,evidencePayload};
+    setEvidencePrepStatus("✓ 증빙 준비 완료","ready");
+    return prefetchedEvidence;
+  }catch(e){
+    if(seq===evidencePrefetchSeq){
+      prefetchedEvidence=null;
+      setEvidencePrepStatus("증빙 선행 준비 실패","failed");
+    }
+    return null;
+  }
+}
+function startEvidencePrefetch(){
+  const payload=basePayload();
+  if(!evidenceCanPrefetch(payload)){
+    setEvidencePrepStatus("");
+    return Promise.resolve(null);
+  }
+  const context=evidenceContextKey(payload);
+  if(prefetchedEvidence&&prefetchedEvidence.context===context){
+    setEvidencePrepStatus("✓ 증빙 준비 완료","ready");
+    return Promise.resolve(prefetchedEvidence);
+  }
+  if(evidencePrefetchPromise&&evidencePrefetchContext===context)return evidencePrefetchPromise;
+
+  const seq=++evidencePrefetchSeq;
+  evidencePrefetchContext=context;
+  evidencePrefetchPromise=prefetchEvidenceWork(context,seq).finally(()=>{
+    if(seq===evidencePrefetchSeq){
+      evidencePrefetchPromise=null;
+      evidencePrefetchContext=null;
+    }
+  });
+  return evidencePrefetchPromise;
+}
+async function evidenceForPdf(){
+  if(!lastEvidencePayload)return null;
+  if(evidencePrefetchPromise){
+    try{await evidencePrefetchPromise;}catch(e){}
+  }
+  if(prefetchedEvidence&&evidencePayloadMatches(prefetchedEvidence.evidencePayload,lastEvidencePayload)){
+    return prefetchedEvidence.dataUrl;
+  }
+  return null;
+}
+function downloadEvidenceBlob(blob,payload){
+  const url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;
+  a.download="오피넷증빙_"+payload.travel_date+"_"+payload.sigungu+".png";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
 function resetCalcFields(){
   ["final_round_trips","final_transport_distance","vehicle_spec","fuel_price_date","price","formula","amount","daily_allowance","daily_note","meal_allowance","meal_note","toll_result","parking_result","lodging_result","source","evidence","total_expense","summary_transport","summary_daily","summary_meal","summary_misc"].forEach(id=>$(id).textContent="-");
   $("fare_summary").textContent="여비 계산 전";
@@ -52,6 +177,7 @@ function clearPriceReview(){
   else setResultState(lastDistance?"거리 확인 완료":"입력 대기",lastDistance?"partial":"");
 }
 function clearDistanceReview(){
+  invalidateEvidenceCache();
   lastDistance=null; $("distanceNextButton").disabled=true; $("step2Button").disabled=true; $("tab1check").textContent="";
   ["resolved_origin","resolved_destination","one_way_distance","distance_source","destination_code"].forEach(id=>$(id).textContent="-");
   $("trip_summary").textContent="거리 확인 전";
@@ -187,9 +313,9 @@ const dz=$("dropZone");
 ["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("dragging");}));
 dz.addEventListener("drop",e=>uploadTravelPdf(e.dataTransfer.files[0]));
 
-[$("vehicle_type"),$("phev_energy_source")].forEach(el=>el.addEventListener("change",()=>{clearPriceReview();updateVehicle();}));
+[$("vehicle_type"),$("phev_energy_source")].forEach(el=>el.addEventListener("change",()=>{invalidateEvidenceCache();clearPriceReview();updateVehicle();}));
 [$("trip_type"),$("round_trip")].forEach(el=>el.addEventListener("change",()=>{clearPriceReview();updateTripType();}));
-[$("travel_date"),$("end_date")].forEach(el=>el.addEventListener("change",()=>{clearPriceReview();populateMealCounts();updateTripType();updateManualPriceVisibility();}));
+[$("travel_date"),$("end_date")].forEach(el=>el.addEventListener("change",()=>{invalidateEvidenceCache();clearPriceReview();populateMealCounts();updateTripType();updateManualPriceVisibility();}));
 [$("training_stay_mode"),$("training_round_trips")].forEach(el=>el.addEventListener("change",()=>{clearPriceReview();updateTraining();updateManualPriceVisibility();}));
 ["training_meal_claim_count","provided_meals_count","public_vehicle","toll_fee","parking_fee","lodging_fee","manual_energy_price"].forEach(id=>$(id).addEventListener("change",()=>{clearPriceReview();updateManualPriceVisibility();}));
 ["origin","destination"].forEach(id=>$(id).addEventListener("input",clearDistanceReview));
