@@ -81,8 +81,8 @@ def test_outside_threshold_uses_unrounded_actual_distance():
         one_way_km=5.99,
     )
 
-    # 표시값은 12.0km로 보일 수 있어도 실제 왕복 11.98km이므로 탈락한다.
-    assert result["round_trip_km"] == 12.0
+    # 실제 왕복 11.98km이므로 표시와 판정 모두 12km 미만으로 유지한다.
+    assert result["round_trip_km"] == 11.98
     assert result["eligible"] is False
 
 
