@@ -1,0 +1,31 @@
+{
+  "version": "2026-09-18",
+  "policy": {
+    "provider": "기후에너지환경부",
+    "rate_key": "rapid_50_99_kw",
+    "rate_label": "급속(50~99kW)",
+    "unit": "원/kWh",
+    "source_url": "https://ev.or.kr/nportal/evcarInfo/initEvcarChargePriceV2.do",
+    "note": "출장 시작일에 유효한 기후에너지환경부 공공 충전요금 중 급속(50~99kW) 기준을 적용합니다."
+  },
+  "rates": [
+    {
+      "effective_from": "2022-09-01",
+      "price_per_kwh": 324.4,
+      "rate_label": "급속(100kW 미만)",
+      "source_updated_at": "2022-07-29",
+      "source_url": "https://me.go.kr/home/web/board/read.do?boardId=1539980&boardMasterId=1",
+      "status": "active",
+      "note": "2022-09-01 시행 공공급속 100kW 미만 요금"
+    },
+    {
+      "effective_from": "2026-08-01",
+      "price_per_kwh": 325.6,
+      "rate_label": "급속(50~99kW)",
+      "source_updated_at": "2026-07-31",
+      "source_url": "https://ev.or.kr/nportal/evcarInfo/initEvcarChargePriceV2.do",
+      "status": "active",
+      "note": "2026-08-01 시행 5단계 충전요금 체계"
+    }
+  ]
+}
