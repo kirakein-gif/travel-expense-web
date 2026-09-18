@@ -1,22 +1,35 @@
+from __future__ import annotations
+
+import re
+from html import unescape
+from urllib.parse import quote, urljoin
 from urllib.request import Request, urlopen
 
-PAGE = "https://ev.or.kr/nportal/evcarInfo/initEvcarChargePriceV2.do"
-UAS = {
-    "chrome": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36",
-    "googlebot": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-    "bingbot": "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
-    "curl": "curl/8.5.0",
-}
+BASE = "https://www.me.go.kr"
+SEARCHES = [
+    f"{BASE}/home/web/board/list.do?boardMasterId=1&menuId=286&maxPageItems=20&pagerOffset=0&searchKey=title&searchValue={quote('충전요금')}",
+    f"{BASE}/home/web/board/list.do?boardMasterId=39&menuId=290&maxPageItems=20&pagerOffset=0&searchKey=title&searchValue={quote('충전요금')}",
+]
 
-for name, ua in UAS.items():
-    req = Request(PAGE, headers={"User-Agent": ua, "Accept-Language": "ko-KR,ko;q=0.9"})
-    try:
-        with urlopen(req, timeout=30) as res:
-            raw = res.read()
-            text = raw.decode("utf-8", errors="replace")
-            print(name, "status", getattr(res, "status", None), "len", len(text),
-                  "ministry", "기후에너지환경부" in text, "price", "325.6" in text,
-                  "content-type", res.headers.get("Content-Type"))
-            print("prefix", text[:180].replace("\n", " "))
-    except Exception as e:
-        print(name, "ERROR", repr(e))
+
+def fetch(url: str) -> str:
+    req = Request(url, headers={
+        "User-Agent": "Mozilla/5.0",
+        "Accept-Language": "ko-KR,ko;q=0.9",
+    })
+    with urlopen(req, timeout=30) as res:
+        text = res.read().decode("utf-8", errors="replace")
+        print("FETCH", res.status, len(text), url)
+        return text
+
+
+for url in SEARCHES:
+    html = fetch(url)
+    print("contains 2026 title:", "전기차 공공 충전 요금 체계 개편" in html)
+    print("contains charge price:", "충전요금" in html)
+    links = re.findall(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', html, flags=re.I|re.S)
+    for href, label in links:
+        label_text = re.sub(r"<[^>]+>", " ", unescape(label))
+        label_text = re.sub(r"\s+", " ", label_text).strip()
+        if "충전" in label_text and "요금" in label_text:
+            print("MATCH_LINK", label_text[:180], urljoin(url, unescape(href)))
