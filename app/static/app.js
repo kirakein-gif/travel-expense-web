@@ -41,6 +41,7 @@ function setResultState(text,kind){
 }
 function resetCalcFields(){
   ["final_round_trips","final_transport_distance","vehicle_spec","fuel_price_date","price","formula","amount","daily_allowance","daily_note","meal_allowance","meal_note","toll_result","parking_result","lodging_result","source","evidence","total_expense","summary_transport","summary_daily","summary_meal","summary_misc"].forEach(id=>$(id).textContent="-");
+  $("fare_summary").textContent="여비 계산 전";
 }
 function clearPriceReview(){
   lastPayload=null; lastEvidencePayload=null;
@@ -52,7 +53,8 @@ function clearPriceReview(){
 }
 function clearDistanceReview(){
   lastDistance=null; $("distanceNextButton").disabled=true; $("step2Button").disabled=true; $("tab1check").textContent="";
-  ["resolved_origin","resolved_destination","one_way_distance","distance_source","destination_code","jurisdiction_pair","eligibility_round_trip","outside_eligibility"].forEach(id=>$(id).textContent="-");
+  ["resolved_origin","resolved_destination","one_way_distance","distance_source","destination_code"].forEach(id=>$(id).textContent="-");
+  $("trip_summary").textContent="거리 확인 전";
   $("scopeAlert").className="scope-alert hidden"; $("scopeAlert").textContent="";
   clearPriceReview();
 }
@@ -206,9 +208,9 @@ $("distanceButton").addEventListener("click",async()=>{
     $("resolved_destination").textContent=placeText(data.resolved_destination_name,data.resolved_destination_address);
     $("one_way_distance").textContent=fmt(data.one_way_distance_km)+" km";$("distance_source").textContent=data.distance_source+(data.distance_cache_hit?" · 캐시":"");
     $("destination_code").textContent=data.destination_support_office||data.destination_code||data.sigungu||"-";
-    $("jurisdiction_pair").textContent=(data.origin_jurisdiction||"-")+" → "+(data.destination_jurisdiction||"-");
-    $("eligibility_round_trip").textContent=fmt(data.eligibility_round_trip_km)+" km · 1회 왕복 기준";
-    $("outside_eligibility").textContent=data.outside_travel_eligible?"지급 대상":"지급 대상 아님";
+    const originLabel=data.resolved_origin_name||payload.origin;
+    const destinationLabel=data.resolved_destination_name||payload.destination;
+    $("trip_summary").textContent=originLabel+" → "+destinationLabel+" · 편도 "+fmt(data.one_way_distance_km)+"km";
     $("scopeAlert").className="scope-alert "+(data.outside_travel_eligible?"eligible":"blocked");
     $("scopeAlert").textContent=(data.outside_travel_eligible?"관외여비 지급 대상 · ":"관외여비 지급 대상 아님 · ")+data.outside_travel_reason;
     updateManualPriceVisibility();
@@ -247,12 +249,13 @@ $("calculateButton").addEventListener("click",async()=>{
     $("summary_daily").textContent=fmt(data.daily_allowance)+" 원";
     $("summary_meal").textContent=fmt(data.meal_allowance)+" 원";
     $("summary_misc").textContent=fmt(Number(data.toll_fee||0)+Number(data.parking_fee||0)+Number(data.lodging_fee||0))+" 원";
+    $("fare_summary").textContent=days()+"일 · "+($("trip_type").value==="training"?"교육훈련":"일반출장")+" · 자동차운임 "+(data.estimated_transport_cost==null?"-":fmt(data.estimated_transport_cost)+"원")+" · 일비 "+fmt(data.daily_allowance)+"원 · 식비 "+fmt(data.meal_allowance)+"원";
     $("source").textContent=(data.price_source||"-")+(data.price_cache_hit?" · 캐시":"");
     const spec=currentVehicleSpec(),canEvidence=spec.evidence&&data.energy_price!=null&&!payload.public_vehicle&&data.evidence_status!=="manual_price";
     if(canEvidence){lastEvidencePayload={travel_date:payload.travel_date,vehicle_type:spec.evidence,province:lastDistance.province,sigungu:lastDistance.sigungu,expected_price:data.energy_price};$("evidenceButton").disabled=false;$("evidence").textContent="API 가격 확인 · 증빙 생성 대기";}
     else{lastEvidencePayload=null;$("evidenceButton").disabled=true;$("evidence").textContent=data.evidence_status;}
     $("pdfButton").disabled=false;$("outputActions").classList.remove("hidden");$("tab2check").textContent="✓";setResultState("최종 산출 완료","done");
-    $("globalStatus").textContent="여비 계산 완료 · 오른쪽 최종 산출을 확인하고 왼쪽에서 증빙 또는 PDF를 생성하세요.";
+    $("globalStatus").textContent="여비 계산 완료 · 오른쪽 최종 산출을 확인하고 위쪽에서 증빙 또는 PDF를 생성하세요.";
   }catch(e){$("globalStatus").textContent=e.message;}finally{$("calculateButton").disabled=false;}
 });
 
