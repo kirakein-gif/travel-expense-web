@@ -5,7 +5,7 @@ on:
     - cron: "10 0 1 * *" # 매월 1일 09:10 KST
   workflow_dispatch:
   push:
-    branches: [main, ev-rate-selenium-check-v124]
+    branches: [main]
     paths:
       - ".github/workflows/ev-rate-check.yml"
       - "scripts/check_ev_charge_price.py"
