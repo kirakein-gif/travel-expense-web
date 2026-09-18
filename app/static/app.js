@@ -335,7 +335,7 @@ const dz=$("dropZone");
 ["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("dragging");}));
 dz.addEventListener("drop",e=>uploadTravelPdf(e.dataTransfer.files[0]));
 
-[$("vehicle_type"),$("phev_energy_source")].forEach(el=>el.addEventListener("change",()=>{invalidateEvidenceCache();clearPriceReview();updateVehicle();}));
+[$("vehicle_type"),$("phev_energy_source")].forEach(el=>el.addEventListener("change",()=>{$("manual_energy_price").value="";invalidateEvidenceCache();clearPriceReview();updateVehicle();}));
 [$("trip_type"),$("round_trip")].forEach(el=>el.addEventListener("change",()=>{clearPriceReview();updateTripType();}));
 [$("travel_date"),$("end_date")].forEach(el=>el.addEventListener("change",()=>{invalidateEvidenceCache();clearPriceReview();populateMealCounts();updateTripType();updateManualPriceVisibility();}));
 [$("training_stay_mode"),$("training_round_trips")].forEach(el=>el.addEventListener("change",()=>{clearPriceReview();updateTraining();updateManualPriceVisibility();}));
@@ -410,7 +410,10 @@ $("calculateButton").addEventListener("click",async()=>{
       $("evidenceButton").disabled=false;
       $("evidence").textContent=prefetchedEvidence&&evidencePayloadMatches(prefetchedEvidence.evidencePayload,lastEvidencePayload)?"verified_web_capture · 임시 캐시":"API 가격 확인 · 증빙 준비 중/대기";
     }else{
-      lastEvidencePayload=null;$("evidenceButton").disabled=true;$("evidence").textContent=data.evidence_status;
+      lastEvidencePayload=null;$("evidenceButton").disabled=true;
+      if(data.evidence_status==="official_ev_rate") $("evidence").textContent="무공해차 누리집 기준단가 자동 적용";
+      else if(data.evidence_status==="manual_hydrogen_price") $("evidence").textContent="수소단가 직접입력";
+      else $("evidence").textContent=data.evidence_status;
     }
     $("pdfButton").disabled=false;$("regulationPdfButton").disabled=false;$("outputActions").classList.remove("hidden");$("tab2check").textContent="✓";setResultState("최종 산출 완료","done");
     $("globalStatus").textContent="여비 계산 완료 · 오른쪽 최종 산출을 확인하고 여비신청서를 생성하세요.";
