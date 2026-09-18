@@ -22,6 +22,7 @@ from app.services.chungnam_policy import (
 )
 from app.services.kakao_service import driving_distance, geocode
 from app.services.price_service import get_energy_price
+from app.services.travel_scope import outside_travel_eligibility
 from app.services.travel_policy import (
     calculate_allowances,
     get_vehicle_spec,
@@ -92,6 +93,14 @@ async def resolve_distance(req: TravelRequest) -> DistanceResponse:
     if not province or not sigungu:
         raise ValueError("출장지의 시도/시군구를 판별하지 못했습니다.")
 
+    eligibility = outside_travel_eligibility(
+        origin_province=origin_province,
+        origin_sigungu=origin_sigungu,
+        destination_province=province,
+        destination_sigungu=sigungu,
+        one_way_km=one_way_km,
+    )
+
     return DistanceResponse(
         one_way_distance_km=round(one_way_km, 1),
         distance_km=round(provisional_distance, 1),
@@ -104,6 +113,11 @@ async def resolve_distance(req: TravelRequest) -> DistanceResponse:
         sigungu=sigungu,
         origin_province=origin_province,
         origin_sigungu=origin_sigungu,
+        outside_travel_eligible=eligibility["eligible"],
+        outside_travel_reason=eligibility["reason"],
+        eligibility_round_trip_km=eligibility["round_trip_km"],
+        origin_jurisdiction=eligibility["origin_jurisdiction"],
+        destination_jurisdiction=eligibility["destination_jurisdiction"],
         resolved_origin_name=origin.get("resolved_name"),
         resolved_origin_address=origin.get("resolved_address") or origin.get("address_name"),
         resolved_destination_name=destination.get("resolved_name"),
@@ -289,6 +303,9 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
 
 async def estimate_travel(req: TravelRequest) -> EstimateResponse:
     distance = await resolve_distance(req)
+    if not distance.outside_travel_eligible:
+        raise ValueError(distance.outside_travel_reason)
+
     price = await resolve_price(
         PriceRequest(
             travel_date=req.travel_date,
