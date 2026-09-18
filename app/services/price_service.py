@@ -7,6 +7,7 @@ from app.browser.opinet_browser import normalize_sigungu, query_opinet_region_pr
 from app.config import OPINET_API_KEY
 from app.services.cache_service import cache
 from app.services.opinet_api_service import get_historical_area_price
+from app.services.ev_rate_service import get_electric_rate
 from app.services.travel_policy import get_vehicle_spec
 
 
@@ -131,21 +132,28 @@ async def get_energy_price(
         )
 
     if lookup_vehicle_type == "electric":
+        rate = get_electric_rate(travel_date)
+        updated = rate.get("source_updated_at")
+        source = (
+            f'무공해차 통합누리집 · {rate["provider"]} {rate["rate_label"]}'
+            + (f" · 갱신 {updated}" if updated else "")
+        )
         return {
-            "price": None,
-            "source": "환경부 무공해차 통합누리집 급속충전요금 (연결 예정)",
-            "source_url": None,
-            "evidence_status": "official_rate_pending",
+            "price": rate["price"],
+            "source": source,
+            "source_url": rate.get("source_url"),
+            "evidence_status": "official_ev_rate",
             "evidence_path": None,
             "cache_hit": False,
+            "effective_from": rate["effective_from"],
         }
 
     if lookup_vehicle_type == "hydrogen":
         return {
             "price": None,
-            "source": "수소 공식가격 출처 (기관 규정 확인 후 연결)",
+            "source": "수소단가 사용자 직접입력",
             "source_url": None,
-            "evidence_status": "policy_pending",
+            "evidence_status": "manual_hydrogen_price",
             "evidence_path": None,
             "cache_hit": False,
         }
