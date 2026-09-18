@@ -40,7 +40,13 @@ def travel_jurisdiction(province: str, sigungu: str) -> TravelJurisdiction:
     if province in SEJONG_NAMES or province_key == "세종":
         return TravelJurisdiction("세종", "세종")
 
-    if province in METRO_PROVINCES or province_key in METRO_PROVINCES:
+    metro_like = (
+        province in METRO_PROVINCES
+        or province_key in METRO_PROVINCES
+        or province.endswith(("특별시", "광역시"))
+        or "통합특별시" in province
+    )
+    if metro_like:
         unit = parts[0] if parts else province_key
         return TravelJurisdiction(f"{province_key}|{unit}", unit)
 
