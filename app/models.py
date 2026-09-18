@@ -52,6 +52,11 @@ class DistanceResponse(BaseModel):
     sigungu: str
     origin_province: str = ""
     origin_sigungu: str = ""
+    outside_travel_eligible: bool = True
+    outside_travel_reason: str = ""
+    eligibility_round_trip_km: float = 0
+    origin_jurisdiction: str = ""
+    destination_jurisdiction: str = ""
     resolved_origin_name: Optional[str] = None
     resolved_origin_address: Optional[str] = None
     resolved_destination_name: Optional[str] = None
