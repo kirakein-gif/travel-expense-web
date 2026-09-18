@@ -101,7 +101,9 @@ def transport_distance(
         )
         return round(one_way_km * 2 * count, 1), float(count)
 
-    count = 1.0 if round_trip else 0.5
+    # 일반출장은 왕복 출장이라면 출장일수만큼 매일 왕복하는 것으로 계산합니다.
+    # 예: 2일 출장 = 왕복 2회, 3일 출장 = 왕복 3회.
+    count = float(trip_days(start_date, end_date)) if round_trip else 0.5
     return round(one_way_km * 2 * count, 1), count
 
 
