@@ -26,7 +26,6 @@ from app.services.travel_scope import outside_travel_eligibility
 from app.services.travel_policy import (
     calculate_allowances,
     get_vehicle_spec,
-    same_work_area,
     transport_distance,
     trip_days,
 )
@@ -212,18 +211,8 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
     amount = None
     unit_cost = None
     formula = None
-    training_inside = req.trip_type == "training" and same_work_area(req.origin_sigungu, req.sigungu)
 
-    if training_inside:
-        price_result = {
-            "price": None,
-            "source": "교육훈련(근무지내) · 단가조회 생략",
-            "evidence_status": "not_required",
-            "cache_hit": False,
-        }
-        amount = 0
-        formula = "교육훈련(근무지내 지역): 운임 지급하지 않음"
-    elif req.public_vehicle:
+    if req.public_vehicle:
         price_result = {
             "price": None,
             "source": "공용차량 이용 · 단가조회 생략",
