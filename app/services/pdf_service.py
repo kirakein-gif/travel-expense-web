@@ -669,7 +669,7 @@ async def generate_regulation_pdf(
     font-size: 12px;
   }}
   .evidence-wrap {{
-    height: 214mm;
+    height: 210mm;
     border: 1px solid #999;
     padding: 2mm;
     display: flex;
