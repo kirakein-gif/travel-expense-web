@@ -35,6 +35,8 @@ async def generate_opinet_evidence(
         province_name=province_name,
         vehicle_type=vehicle_type,
         evidence_dir=evidence_dir,
+        highlight_sigungu=sigungu_name,
+        highlight_expected_price=float(expected_price),
     )
 
     matched_name = None
