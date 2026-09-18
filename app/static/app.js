@@ -45,7 +45,7 @@ function resetCalcFields(){
 }
 function clearPriceReview(){
   lastPayload=null; lastEvidencePayload=null;
-  $("pdfButton").disabled=true; $("evidenceButton").disabled=true; $("tab2check").textContent="";
+  $("pdfButton").disabled=true; $("regulationPdfButton").disabled=true; $("evidenceButton").disabled=true; $("tab2check").textContent="";
   resetCalcFields();
   $("outputActions").classList.add("hidden");
   if(lastDistance && !lastDistance.outside_travel_eligible) setResultState("관외 대상 아님","blocked");
@@ -254,7 +254,7 @@ $("calculateButton").addEventListener("click",async()=>{
     const spec=currentVehicleSpec(),canEvidence=spec.evidence&&data.energy_price!=null&&!payload.public_vehicle&&data.evidence_status!=="manual_price";
     if(canEvidence){lastEvidencePayload={travel_date:payload.travel_date,vehicle_type:spec.evidence,province:lastDistance.province,sigungu:lastDistance.sigungu,expected_price:data.energy_price};$("evidenceButton").disabled=false;$("evidence").textContent="API 가격 확인 · 증빙 생성 대기";}
     else{lastEvidencePayload=null;$("evidenceButton").disabled=true;$("evidence").textContent=data.evidence_status;}
-    $("pdfButton").disabled=false;$("outputActions").classList.remove("hidden");$("tab2check").textContent="✓";setResultState("최종 산출 완료","done");
+    $("pdfButton").disabled=false;$("regulationPdfButton").disabled=false;$("outputActions").classList.remove("hidden");$("tab2check").textContent="✓";setResultState("최종 산출 완료","done");
     $("globalStatus").textContent="여비 계산 완료 · 오른쪽 최종 산출을 확인하고 위쪽에서 증빙 또는 PDF를 생성하세요.";
   }catch(e){$("globalStatus").textContent=e.message;}finally{$("calculateButton").disabled=false;}
 });
@@ -274,4 +274,26 @@ $("pdfButton").addEventListener("click",async()=>{
     const r=await fetch("/api/report.pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pdfPayload)});if(!r.ok){const d=await r.json();throw new Error(d.detail||"PDF 생성 실패");}
     const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="여비산출내역_"+pdfPayload.travel_date+".pdf";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }catch(e){$("globalStatus").textContent=e.message;}finally{$("pdfButton").textContent=old;$("pdfButton").disabled=false;}
+});
+$("regulationPdfButton").addEventListener("click",async()=>{
+  if(!lastPayload)return;
+  $("regulationPdfButton").disabled=true;
+  const old=$("regulationPdfButton").textContent;
+  $("regulationPdfButton").textContent="규정서식 생성 중...";
+  try{
+    const current=basePayload();
+    const pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,passengers:current.passengers,purpose:current.purpose,manual_energy_price:current.manual_energy_price};
+    const r=await fetch("/api/report-regulation.pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pdfPayload)});
+    if(!r.ok){const d=await r.json();throw new Error(d.detail||"규정서식 PDF 생성 실패");}
+    const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;
+    a.download="규정서식_여비신청서_"+pdfPayload.travel_date+".pdf";
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch(e){
+    $("globalStatus").textContent=e.message;
+  }finally{
+    $("regulationPdfButton").textContent=old;
+    $("regulationPdfButton").disabled=false;
+  }
 });
