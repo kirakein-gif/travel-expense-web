@@ -459,6 +459,12 @@ async def generate_regulation_pdf(
     origin_address = result.resolved_origin_address or req.origin
     destination_address = result.resolved_destination_address or req.destination
     price_date = result.fuel_price_date.isoformat() if result.fuel_price_date else "-"
+    vehicle = result.vehicle_label or req.vehicle_type
+    efficiency_text = (
+        f"{result.effective_efficiency:g} {result.efficiency_unit}"
+        if result.effective_efficiency and result.efficiency_unit
+        else "-"
+    )
     application_date = datetime.now(ZoneInfo("Asia/Seoul")).date()
     application_date_ko = (
         f"{application_date.year}년 {application_date.month}월 {application_date.day}일"
@@ -734,6 +740,10 @@ async def generate_regulation_pdf(
         <th>편도거리</th><td>{_num(result.one_way_distance_km)} km</td>
       </tr>
       <tr>
+        <th>차량유형</th><td>{_e(vehicle)}</td>
+        <th>연비/전비</th><td>{_e(efficiency_text)}</td>
+      </tr>
+      <tr>
         <th>단가 기준일</th><td>{_e(price_date)}</td>
         <th>적용단가</th><td>{_e(_unit_price_text(result))}</td>
       </tr>
@@ -832,6 +842,7 @@ async def generate_regulation_pdf(
       </div>
       <div class="evidence-basis">
         <b>단가 및 운임</b><br>
+        차량 {_e(vehicle)} / 연비·전비 {_e(efficiency_text)}<br>
         기준일 {_e(price_date)} / {_e(_unit_price_text(result))}<br>
         {_e(result.price_source)}<br>
         {_e(result.calculation_formula)}
