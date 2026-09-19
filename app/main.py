@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from app.routes.travel import router as travel_router
 
-APP_VERSION = "0.4.1-diagnostic"
+APP_VERSION = "1.23.1"
 
 app = FastAPI(title="여비정산 자동화", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -13,7 +13,10 @@ templates = Jinja2Templates(directory="app/templates")
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request, "app_version": APP_VERSION},
+    )
 
 
 @app.get("/health")

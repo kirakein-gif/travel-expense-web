@@ -390,6 +390,135 @@ async def _extract_region_price_table(page: Page, product_label: str) -> dict[st
     return prices
 
 
+async def _bring_sigungu_into_view(
+    page: Page,
+    product_label: str,
+    sigungu_name: str,
+) -> bool:
+    """Find a sigungu even when OPINET renders it below an internal scroll area.
+
+    OPINET's long province tables (notably Gyeonggi) can live inside a fixed-height
+    overflow container. A full-page screenshot does not expand that container, and
+    some revisions render rows lazily while scrolling. Walk the relevant scroll
+    containers, locate the requested row, and leave it centered for evidence capture.
+    """
+    target = re.sub(r"\s+", "", normalize_sigungu(sigungu_name))
+    if not target:
+        return False
+
+    return bool(
+        await page.evaluate(
+            """
+            async ({ productLabel, target }) => {
+                const compact = (v) => (v || '').replace(/\s+/g, '').trim();
+                const productKey = compact(productLabel);
+                const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+                const matches = (value) => {
+                    const key = compact(value);
+                    if (!key) return false;
+                    return key === target
+                        || key.endsWith(target)
+                        || target.endsWith(key)
+                        || key.includes(target);
+                };
+
+                const relevantTables = () => Array.from(document.querySelectorAll('table'))
+                    .filter((table) => compact(table.innerText).includes(productKey));
+
+                const findRow = () => {
+                    for (const table of relevantTables()) {
+                        for (const row of Array.from(table.querySelectorAll('tr'))) {
+                            const cells = row.querySelectorAll('th, td');
+                            if (!cells.length) continue;
+                            if (matches(cells[0].innerText || cells[0].textContent)) {
+                                return row;
+                            }
+                        }
+                    }
+                    return null;
+                };
+
+                const scrollContainers = () => {
+                    const found = [];
+                    for (const table of relevantTables()) {
+                        let node = table.parentElement;
+                        while (node && node !== document.body && node !== document.documentElement) {
+                            if (node.scrollHeight > node.clientHeight + 8 && !found.includes(node)) {
+                                found.push(node);
+                            }
+                            node = node.parentElement;
+                        }
+                    }
+                    return found;
+                };
+
+                const centerRow = async (row) => {
+                    row.scrollIntoView({ block: 'center', inline: 'nearest' });
+                    await sleep(80);
+                    for (const container of scrollContainers()) {
+                        if (!container.contains(row)) continue;
+                        const rowRect = row.getBoundingClientRect();
+                        const boxRect = container.getBoundingClientRect();
+                        const delta = rowRect.top - boxRect.top
+                            - Math.max(0, (container.clientHeight - rowRect.height) / 2);
+                        if (Math.abs(delta) > 2) container.scrollTop += delta;
+                    }
+                    await sleep(80);
+                };
+
+                let row = findRow();
+                if (row) {
+                    await centerRow(row);
+                    return true;
+                }
+
+                // Some OPINET result lists are lazy/virtualized. Traverse every
+                // relevant overflow container and rescan after each scroll step.
+                const containers = scrollContainers();
+                for (const container of containers) {
+                    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+                    const step = Math.max(140, Math.floor(container.clientHeight * 0.72));
+                    container.scrollTop = 0;
+                    container.dispatchEvent(new Event('scroll', { bubbles: true }));
+                    await sleep(100);
+
+                    for (let pos = 0; pos <= maxScroll + step; pos += step) {
+                        container.scrollTop = Math.min(pos, maxScroll);
+                        container.dispatchEvent(new Event('scroll', { bubbles: true }));
+                        await sleep(110);
+                        row = findRow();
+                        if (row) {
+                            await centerRow(row);
+                            return true;
+                        }
+                        if (container.scrollTop >= maxScroll - 1) break;
+                    }
+                }
+
+                // Last fallback for pages whose result list follows window scroll.
+                const pageStep = Math.max(400, Math.floor(window.innerHeight * 0.7));
+                const maxPageScroll = Math.max(
+                    0,
+                    document.documentElement.scrollHeight - window.innerHeight
+                );
+                for (let y = 0; y <= maxPageScroll + pageStep; y += pageStep) {
+                    window.scrollTo(0, Math.min(y, maxPageScroll));
+                    await sleep(100);
+                    row = findRow();
+                    if (row) {
+                        await centerRow(row);
+                        return true;
+                    }
+                    if (window.scrollY >= maxPageScroll - 1) break;
+                }
+                return false;
+            }
+            """,
+            {"productLabel": product_label, "target": target},
+        )
+    )
+
+
 async def _highlight_evidence_target(
     page: Page,
     product_label: str,
@@ -397,6 +526,7 @@ async def _highlight_evidence_target(
     expected_price: float | None = None,
 ) -> bool:
     """Visually mark the region row and applied price cell for evidence screenshots."""
+    await _bring_sigungu_into_view(page, product_label, sigungu_name)
     target = re.sub(r"\s+", "", normalize_sigungu(sigungu_name))
     if not target:
         return False
@@ -538,10 +668,10 @@ async def capture_opinet_evidence_comparison(
     output_dir = Path(evidence_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     current_path = output_dir / (
-        f"01_current_{travel_date.isoformat()}_{province}_{vehicle_type}.png"
+        f"01_조회본_{travel_date.isoformat()}_{province}_{vehicle_type}.png"
     )
     print_path = output_dir / (
-        f"02_print_{travel_date.isoformat()}_{province}_{vehicle_type}.png"
+        f"02_인쇄본_{travel_date.isoformat()}_{province}_{vehicle_type}.png"
     )
 
     async with async_playwright() as p:
@@ -659,6 +789,8 @@ async def query_opinet_region_prices(
             await _prepare_oil_page(page, travel_date, province, vehicle_type)
             source_url = OIL_URL
 
+        if highlight_sigungu:
+            await _bring_sigungu_into_view(page, product_label, highlight_sigungu)
         prices = await _extract_region_price_table(page, product_label)
         if highlight_sigungu:
             try:

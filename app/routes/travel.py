@@ -107,6 +107,7 @@ async def price(req: PriceRequest):
 async def opinet_evidence_compare(
     background_tasks: BackgroundTasks,
     travel_date: date,
+    province: str = "경기도",
     sigungu: str = "수원시",
     vehicle_type: Literal["gasoline", "diesel", "lpg"] = "gasoline",
 ):
@@ -116,7 +117,7 @@ async def opinet_evidence_compare(
     try:
         result = await capture_opinet_evidence_comparison(
             travel_date=travel_date,
-            province_name="경기도",
+            province_name=province,
             sigungu_name=sigungu,
             vehicle_type=vehicle_type,
             evidence_dir=evidence_dir,
@@ -124,7 +125,7 @@ async def opinet_evidence_compare(
         current_size = os.path.getsize(result.current_path)
         print_size = os.path.getsize(result.print_path)
         note = (
-            f"지역: 경기도 {sigungu}\n"
+            f"지역: {province} {sigungu}\n"
             f"일자: {travel_date.isoformat()}\n"
             f"유종: {vehicle_type} ({result.product_label})\n"
             f"현재 화면 PNG: {current_size:,} bytes\n"
@@ -141,7 +142,7 @@ async def opinet_evidence_compare(
             zip_path,
             media_type="application/zip",
             filename=(
-                f"opinet_compare_gyeonggi_{sigungu}_"
+                f"opinet_compare_{sigungu}_"
                 f"{travel_date.isoformat()}_{vehicle_type}.zip"
             ),
         )
