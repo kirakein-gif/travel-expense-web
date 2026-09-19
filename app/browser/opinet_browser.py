@@ -55,6 +55,7 @@ class OpinetEvidenceComparison:
     current_path: str
     print_path: str
     province: str
+    sigungu: str
     product_label: str
     print_url: str
 
@@ -71,6 +72,29 @@ def normalize_province(value: str) -> str:
 
 def normalize_sigungu(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip())
+
+
+METROPOLITAN_PROVINCES = {"서울", "부산", "대구", "인천", "광주", "대전", "울산"}
+
+
+def normalize_opinet_sigungu(province_name: str, sigungu_name: str) -> str:
+    """Convert Kakao administrative names to the level OPINET uses.
+
+    Provincial cities can include a lower district in Kakao (for example
+    '화성시 만세구' or '수원시 영통구'), while OPINET's regional average table
+    is keyed by the parent city ('화성시', '수원시'). Metropolitan cities keep
+    their gu/gun level because that is the OPINET lookup unit.
+    """
+    province = normalize_province(province_name)
+    sigungu = normalize_sigungu(sigungu_name)
+    if province == "세종":
+        return "세종"
+    if province in METROPOLITAN_PROVINCES:
+        return sigungu
+    first = sigungu.split(" ", 1)[0]
+    if first.endswith(("시", "군")):
+        return first
+    return sigungu
 
 
 def _province_option_candidates(province: str) -> list[str]:
@@ -318,6 +342,21 @@ async def _select_province_dropdown(page: Page, province: str) -> None:
             await page.wait_for_timeout(1200)
             return
     raise RuntimeError(f"오피넷 시도 선택 드롭다운에서 {province}을(를) 찾지 못했습니다.")
+
+
+async def _assert_evidence_date(page: Page, target: date) -> None:
+    body = re.sub(r"\s+", "", await page.locator("body").inner_text())
+    candidates = {
+        f"{target.year}년{target.month:02d}월{target.day:02d}일",
+        f"{target.year}년{target.month}월{target.day}일",
+        target.isoformat(),
+        target.strftime("%Y.%m.%d"),
+    }
+    normalized = {re.sub(r"\s+", "", value) for value in candidates}
+    if not any(value in body for value in normalized):
+        raise RuntimeError(
+            f"오피넷 증빙 날짜가 요청일({target.isoformat()})과 일치하는지 확인할 수 없습니다."
+        )
 
 
 async def _click_search(page: Page) -> None:
@@ -652,6 +691,44 @@ async def _open_print_view(page: Page) -> Page:
     return print_page
 
 
+async def _expand_print_result(page: Page, product_label: str) -> None:
+    """Expand OPINET print-result containers so long provinces are not clipped."""
+    await page.evaluate(
+        """
+        (productLabel) => {
+            const compact = (v) => (v || '').replace(/\s+/g, '').trim();
+            const productKey = compact(productLabel);
+            const tables = Array.from(document.querySelectorAll('table'))
+                .filter((table) => compact(table.innerText).includes(productKey));
+            const nodes = new Set();
+            for (const table of tables) {
+                nodes.add(table);
+                for (const child of table.querySelectorAll('*')) {
+                    if (child.scrollHeight > child.clientHeight + 4) nodes.add(child);
+                }
+                let node = table.parentElement;
+                while (node && node !== document.documentElement) {
+                    nodes.add(node);
+                    node = node.parentElement;
+                }
+            }
+            nodes.add(document.body);
+            nodes.add(document.documentElement);
+            for (const node of nodes) {
+                if (!node || !node.style) continue;
+                node.style.setProperty('height', 'auto', 'important');
+                node.style.setProperty('max-height', 'none', 'important');
+                node.style.setProperty('overflow', 'visible', 'important');
+                node.style.setProperty('overflow-y', 'visible', 'important');
+            }
+            window.scrollTo(0, 0);
+        }
+        """,
+        product_label,
+    )
+    await page.wait_for_timeout(200)
+
+
 async def capture_opinet_evidence_comparison(
     travel_date: date,
     province_name: str,
@@ -664,6 +741,7 @@ async def capture_opinet_evidence_comparison(
         raise ValueError("OPINET 비교 캡처 대상 차량이 아닙니다.")
 
     province = normalize_province(province_name)
+    target_sigungu = normalize_opinet_sigungu(province_name, sigungu_name)
     product_label = PRODUCT_LABELS[vehicle_type]
     output_dir = Path(evidence_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -695,7 +773,7 @@ async def capture_opinet_evidence_comparison(
             await _highlight_evidence_target(
                 page,
                 product_label,
-                sigungu_name,
+                target_sigungu,
                 None,
             )
         except Exception:
@@ -703,11 +781,13 @@ async def capture_opinet_evidence_comparison(
         await page.screenshot(path=str(current_path), full_page=True)
 
         print_page = await _open_print_view(page)
+        await _assert_evidence_date(print_page, travel_date)
+        await _expand_print_result(print_page, product_label)
         try:
             await _highlight_evidence_target(
                 print_page,
                 product_label,
-                sigungu_name,
+                target_sigungu,
                 None,
             )
         except Exception:
@@ -720,6 +800,7 @@ async def capture_opinet_evidence_comparison(
         current_path=str(current_path),
         print_path=str(print_path),
         province=province,
+        sigungu=target_sigungu,
         product_label=product_label,
         print_url=print_url,
     )
@@ -745,6 +826,7 @@ async def _prepare_oil_page(page: Page, travel_date: date, province: str, vehicl
         pass
 
     await _click_search(page)
+    await _assert_evidence_date(page, travel_date)
 
 
 async def _prepare_lpg_page(page: Page, travel_date: date, province: str) -> None:
@@ -752,6 +834,7 @@ async def _prepare_lpg_page(page: Page, travel_date: date, province: str) -> Non
     await _select_date(page, travel_date)
     await _select_single_province_checkbox(page, province)
     await _click_search(page)
+    await _assert_evidence_date(page, travel_date)
 
 
 async def query_opinet_region_prices(
@@ -767,6 +850,11 @@ async def query_opinet_region_prices(
 
     province = normalize_province(province_name)
     product_label = PRODUCT_LABELS[vehicle_type]
+    normalized_highlight_sigungu = (
+        normalize_opinet_sigungu(province_name, highlight_sigungu)
+        if highlight_sigungu
+        else None
+    )
     output_dir = Path(evidence_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     evidence_path = output_dir / f"opinet_{travel_date.isoformat()}_{province}_{vehicle_type}.png"
@@ -789,15 +877,15 @@ async def query_opinet_region_prices(
             await _prepare_oil_page(page, travel_date, province, vehicle_type)
             source_url = OIL_URL
 
-        if highlight_sigungu:
-            await _bring_sigungu_into_view(page, product_label, highlight_sigungu)
+        if normalized_highlight_sigungu:
+            await _bring_sigungu_into_view(page, product_label, normalized_highlight_sigungu)
         prices = await _extract_region_price_table(page, product_label)
-        if highlight_sigungu:
+        if normalized_highlight_sigungu:
             try:
                 await _highlight_evidence_target(
                     page,
                     product_label,
-                    highlight_sigungu,
+                    normalized_highlight_sigungu,
                     highlight_expected_price,
                 )
             except Exception:

@@ -430,14 +430,12 @@ $("evidenceButton").addEventListener("click",async()=>{
       $("globalStatus").textContent="오피넷 증빙 준비 완료 후 비교본을 생성합니다...";
       try{await evidencePrefetchPromise;}catch(e){}
     }
-    const q=new URLSearchParams({
-      travel_date:lastEvidencePayload.travel_date,
-      province:lastEvidencePayload.province,
-      sigungu:lastEvidencePayload.sigungu,
-      vehicle_type:lastEvidencePayload.vehicle_type
-    });
     $("globalStatus").textContent="오피넷 조회본·인쇄본 비교 파일 생성 중...";
-    const response=await fetch("/api/opinet-evidence-compare.zip?"+q.toString());
+    const response=await fetch("/api/opinet-evidence-compare.zip",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(lastEvidencePayload)
+    });
     if(!response.ok){
       let message="증빙 비교 생성 실패";
       try{const d=await response.json();message=d.detail||message;}catch(e){}

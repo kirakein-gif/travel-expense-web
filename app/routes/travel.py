@@ -103,31 +103,28 @@ async def price(req: PriceRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/opinet-evidence-compare.zip")
+@router.post("/opinet-evidence-compare.zip")
 async def opinet_evidence_compare(
+    req: EvidenceRequest,
     background_tasks: BackgroundTasks,
-    travel_date: date,
-    province: str = "경기도",
-    sigungu: str = "수원시",
-    vehicle_type: Literal["gasoline", "diesel", "lpg"] = "gasoline",
 ):
     """Temporary diagnostic: compare current OPINET capture with official print view."""
     evidence_dir = tempfile.mkdtemp(prefix="opinet_compare_")
-    zip_path = os.path.join(evidence_dir, "opinet_compare_gyeonggi.zip")
+    zip_path = os.path.join(evidence_dir, "opinet_compare.zip")
     try:
         result = await capture_opinet_evidence_comparison(
-            travel_date=travel_date,
-            province_name=province,
-            sigungu_name=sigungu,
-            vehicle_type=vehicle_type,
+            travel_date=req.travel_date,
+            province_name=req.province,
+            sigungu_name=req.sigungu,
+            vehicle_type=req.vehicle_type,
             evidence_dir=evidence_dir,
         )
         current_size = os.path.getsize(result.current_path)
         print_size = os.path.getsize(result.print_path)
         note = (
-            f"지역: {province} {sigungu}\n"
-            f"일자: {travel_date.isoformat()}\n"
-            f"유종: {vehicle_type} ({result.product_label})\n"
+            f"지역: {req.province} {result.sigungu}\n"
+            f"일자: {req.travel_date.isoformat()}\n"
+            f"유종: {req.vehicle_type} ({result.product_label})\n"
             f"현재 화면 PNG: {current_size:,} bytes\n"
             f"화면인쇄 PNG: {print_size:,} bytes\n"
             f"화면인쇄 URL: {result.print_url}\n"
@@ -142,8 +139,8 @@ async def opinet_evidence_compare(
             zip_path,
             media_type="application/zip",
             filename=(
-                f"opinet_compare_{sigungu}_"
-                f"{travel_date.isoformat()}_{vehicle_type}.zip"
+                f"opinet_compare_{result.sigungu}_"
+                f"{req.travel_date.isoformat()}_{req.vehicle_type}.zip"
             ),
         )
     except Exception as e:

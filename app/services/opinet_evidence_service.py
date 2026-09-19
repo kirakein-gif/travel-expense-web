@@ -3,7 +3,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from app.browser.opinet_browser import normalize_province, normalize_sigungu, query_opinet_region_prices
+from app.browser.opinet_browser import (
+    normalize_opinet_sigungu,
+    normalize_province,
+    normalize_sigungu,
+    query_opinet_region_prices,
+)
 
 
 def _compact(value: str) -> str:
@@ -30,19 +35,21 @@ async def generate_opinet_evidence(
     if vehicle_type not in {"gasoline", "diesel", "lpg"}:
         raise ValueError("오피넷 증빙 생성은 휘발유·경유·LPG만 지원합니다.")
 
+    target_sigungu = normalize_opinet_sigungu(province_name, sigungu_name)
+
     result = await query_opinet_region_prices(
         travel_date=travel_date,
         province_name=province_name,
         vehicle_type=vehicle_type,
         evidence_dir=evidence_dir,
-        highlight_sigungu=sigungu_name,
+        highlight_sigungu=target_sigungu,
         highlight_expected_price=float(expected_price),
     )
 
     matched_name = None
     matched_price = None
     for row_name, row_price in result.prices.items():
-        if _matches_region(row_name, sigungu_name):
+        if _matches_region(row_name, target_sigungu):
             matched_name = row_name
             matched_price = float(row_price)
             break
@@ -63,7 +70,7 @@ async def generate_opinet_evidence(
     if matched_price is None:
         sample = ", ".join(list(result.prices.keys())[:12]) or "(비어 있음)"
         raise RuntimeError(
-            f"오피넷 증빙 화면에서 {sigungu_name} 가격을 찾지 못했습니다. "
+            f"오피넷 증빙 화면에서 {target_sigungu} 가격을 찾지 못했습니다. "
             f"추출된 지역: {sample}"
         )
 
