@@ -50,6 +50,15 @@ class OpinetRegionResult:
     source_url: str
 
 
+@dataclass
+class OpinetEvidenceComparison:
+    current_path: str
+    print_path: str
+    province: str
+    product_label: str
+    print_url: str
+
+
 def normalize_province(value: str) -> str:
     value = value.strip()
     if value in PROVINCE_ALIASES:
@@ -482,6 +491,108 @@ async def _highlight_evidence_target(
             return True
 
     return False
+
+
+async def _open_print_view(page: Page) -> Page:
+    """Open OPINET's own '화면인쇄' view when available."""
+    button = page.locator("#btn_Print")
+    if not await button.count():
+        button = page.get_by_text("화면인쇄", exact=True)
+    if not await button.count():
+        raise RuntimeError("오피넷 화면인쇄 버튼을 찾지 못했습니다.")
+
+    existing = list(page.context.pages)
+    try:
+        async with page.context.expect_page(timeout=10_000) as page_info:
+            await button.first.click(force=True)
+        print_page = await page_info.value
+    except Exception as exc:
+        # Some OPINET revisions create the window slightly after the click.
+        await page.wait_for_timeout(1200)
+        candidates = [p for p in page.context.pages if p not in existing]
+        if not candidates:
+            raise RuntimeError("오피넷 화면인쇄 창이 열리지 않았습니다.") from exc
+        print_page = candidates[-1]
+
+    try:
+        await print_page.wait_for_load_state("networkidle", timeout=20_000)
+    except Exception:
+        await print_page.wait_for_load_state("domcontentloaded", timeout=10_000)
+    await print_page.wait_for_timeout(700)
+    return print_page
+
+
+async def capture_opinet_evidence_comparison(
+    travel_date: date,
+    province_name: str,
+    sigungu_name: str,
+    vehicle_type: str,
+    evidence_dir: str = "/tmp/evidence_compare",
+) -> OpinetEvidenceComparison:
+    """Capture the current OPINET page and its official print view for visual comparison."""
+    if vehicle_type not in {"gasoline", "diesel", "lpg"}:
+        raise ValueError("OPINET 비교 캡처 대상 차량이 아닙니다.")
+
+    province = normalize_province(province_name)
+    product_label = PRODUCT_LABELS[vehicle_type]
+    output_dir = Path(evidence_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    current_path = output_dir / (
+        f"01_current_{travel_date.isoformat()}_{province}_{vehicle_type}.png"
+    )
+    print_path = output_dir / (
+        f"02_print_{travel_date.isoformat()}_{province}_{vehicle_type}.png"
+    )
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
+        context = await browser.new_context(
+            viewport={"width": 1440, "height": 1600},
+            locale="ko-KR",
+        )
+        page = await context.new_page()
+
+        if vehicle_type == "lpg":
+            await _prepare_lpg_page(page, travel_date, province)
+        else:
+            await _prepare_oil_page(page, travel_date, province, vehicle_type)
+
+        # Apply the same presentation-only highlight to both candidates.
+        try:
+            await _highlight_evidence_target(
+                page,
+                product_label,
+                sigungu_name,
+                None,
+            )
+        except Exception:
+            pass
+        await page.screenshot(path=str(current_path), full_page=True)
+
+        print_page = await _open_print_view(page)
+        try:
+            await _highlight_evidence_target(
+                print_page,
+                product_label,
+                sigungu_name,
+                None,
+            )
+        except Exception:
+            pass
+        await print_page.screenshot(path=str(print_path), full_page=True)
+        print_url = print_page.url
+        await browser.close()
+
+    return OpinetEvidenceComparison(
+        current_path=str(current_path),
+        print_path=str(print_path),
+        province=province,
+        product_label=product_label,
+        print_url=print_url,
+    )
 
 
 async def _prepare_oil_page(page: Page, travel_date: date, province: str, vehicle_type: str) -> None:
