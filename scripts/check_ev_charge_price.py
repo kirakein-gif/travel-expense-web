@@ -57,7 +57,7 @@ def _fetch_static_html() -> str:
     req = Request(
         SOURCE_URL,
         headers={
-            "User-Agent": "Mozilla/5.0 (compatible; travel-expense-web/1.0; +GitHub Actions)"
+            "User-Agent": "Mozilla/5.0 (compatible; ddalkkak-travel-expense/1.24; +GitHub Actions)"
         },
     )
     with urlopen(req, timeout=30) as response:

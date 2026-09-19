@@ -174,7 +174,7 @@ async def generate_estimate_pdf(
 <body>
   <section class="page break">
     <h1>국내출장 여비신청서</h1>
-    <div class="sub">여비정산 자동화 - 실무형 서식</div>
+    <div class="sub">딸깍 여비정산서 - 실무형 서식</div>
 
     <table>
       <tr><th class="label">신청인</th><td colspan="3">{_e(applicant)}</td></tr>

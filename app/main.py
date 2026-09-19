@@ -4,9 +4,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from app.routes.travel import router as travel_router
 
-APP_VERSION = "1.23.7"
+APP_VERSION = "1.24.0"
 
-app = FastAPI(title="여비정산 자동화", version=APP_VERSION)
+app = FastAPI(title="딸깍 여비정산서", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
