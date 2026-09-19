@@ -317,12 +317,21 @@ def _movement_place_labels(result: EstimateResponse) -> tuple[str, str]:
     destination_province = _short_province(result.province)
 
     if origin_province == destination_province:
-        return (
-            _short_local_unit(result.origin_province, result.origin_sigungu),
-            _short_local_unit(result.province, result.sigungu),
-        )
+        origin_label = _short_local_unit(result.origin_province, result.origin_sigungu)
+        destination_label = _short_local_unit(result.province, result.sigungu)
+    else:
+        origin_label = origin_province
+        destination_label = destination_province
 
-    return origin_province, destination_province
+    # 내포는 홍성·예산 행정구역과 별개로 고정거리표의 특수 기준점이다.
+    # 실제 거리 판정 결과가 내포 특수 목적지라면 운임 이동내역에도
+    # '홍성'/'예산' 대신 '내포'라고 표시해 거리 기준과 문서 표기를 맞춘다.
+    if (result.origin_support_office or "").strip() == "내포":
+        origin_label = "내포"
+    if (result.destination_support_office or "").strip() == "내포":
+        destination_label = "내포"
+
+    return origin_label, destination_label
 
 
 def _regulation_movement_rows(
