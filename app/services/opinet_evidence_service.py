@@ -44,6 +44,7 @@ async def generate_opinet_evidence(
         evidence_dir=evidence_dir,
         highlight_sigungu=target_sigungu,
         highlight_expected_price=float(expected_price),
+        evidence_view="print",
     )
 
     matched_name = None

@@ -424,31 +424,37 @@ $("evidenceButton").addEventListener("click",async()=>{
   if(!lastEvidencePayload)return;
   $("evidenceButton").disabled=true;
   const old=$("evidenceButton").textContent;
-  $("evidenceButton").textContent="비교본 생성 중...";
+  $("evidenceButton").textContent="증빙 준비 중...";
   try{
     if(evidencePrefetchPromise){
-      $("globalStatus").textContent="오피넷 증빙 준비 완료 후 비교본을 생성합니다...";
+      $("globalStatus").textContent="미리 준비 중인 오피넷 증빙을 기다리는 중...";
       try{await evidencePrefetchPromise;}catch(e){}
     }
-    $("globalStatus").textContent="오피넷 조회본·인쇄본 비교 파일 생성 중...";
-    const response=await fetch("/api/opinet-evidence-compare.zip",{
+    if(prefetchedEvidence&&evidencePayloadMatches(prefetchedEvidence.evidencePayload,lastEvidencePayload)){
+      downloadEvidenceBlob(prefetchedEvidence.blob,lastEvidencePayload);
+      $("globalStatus").textContent="정산서에 사용되는 오피넷 인쇄 증빙을 내려받았습니다.";
+      return;
+    }
+
+    $("globalStatus").textContent="오피넷 인쇄 증빙 생성 중...";
+    const response=await fetch("/api/opinet-evidence.png",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify(lastEvidencePayload)
     });
-    if(!response.ok){
-      let message="증빙 비교 생성 실패";
-      try{const d=await response.json();message=d.detail||message;}catch(e){}
-      throw new Error(message);
-    }
-    const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
-    a.href=url;
-    a.download="오피넷증빙비교_"+lastEvidencePayload.travel_date+"_"+lastEvidencePayload.sigungu+".zip";
-    a.click();
-    setTimeout(()=>URL.revokeObjectURL(url),1000);
-    $("globalStatus").textContent="증빙 비교 생성 완료 · ZIP 안의 조회본과 인쇄본을 비교해주세요.";
+    if(!response.ok){const d=await response.json();throw new Error(d.detail||"증빙 생성 실패");}
+    const blob=await response.blob(),dataUrl=await blobToDataUrl(blob);
+    prefetchedEvidence={
+      context:evidenceContextKey(basePayload()),
+      dataUrl,
+      blob,
+      evidencePayload:lastEvidencePayload
+    };
+    setEvidencePrepStatus("✓ 증빙 준비 완료","ready");
+    downloadEvidenceBlob(blob,lastEvidencePayload);
+    $("globalStatus").textContent="오피넷 인쇄 증빙 생성 완료 · 같은 출장의 PDF에서 재사용합니다.";
   }catch(e){
-    $("globalStatus").textContent="증빙 비교 생성 실패 · "+e.message;
+    $("globalStatus").textContent="증빙 생성 실패 · "+e.message;
   }finally{
     $("evidenceButton").textContent=old;
     $("evidenceButton").disabled=false;

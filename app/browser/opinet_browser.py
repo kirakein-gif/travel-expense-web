@@ -729,6 +729,184 @@ async def _expand_print_result(page: Page, product_label: str) -> None:
     await page.wait_for_timeout(200)
 
 
+PDF_EVIDENCE_MAX_HEIGHT_PX = 900
+
+
+async def _fold_print_result(
+    page: Page,
+    product_label: str,
+    sigungu_name: str,
+    *,
+    max_height_px: int = PDF_EVIDENCE_MAX_HEIGHT_PX,
+) -> bool:
+    """Fold long OPINET print tables for legible A4 evidence.
+
+    The query header is always kept. If the full official print view already fits
+    the PDF evidence slot, nothing is changed. Otherwise the province-average row
+    and the target sigungu with nearby rows are kept, while omitted ranges are
+    replaced by explicit notice rows.
+    """
+    target = re.sub(r"\s+", "", normalize_sigungu(sigungu_name))
+    if not target:
+        return False
+
+    result = await page.evaluate(
+        """
+        ({ productLabel, target, maxHeight }) => {
+            const compact = (v) => (v || '').replace(/\s+/g, '').trim();
+            const productKey = compact(productLabel);
+            const matches = (value) => {
+                const key = compact(value);
+                return Boolean(
+                    key && (
+                        key === target
+                        || key.endsWith(target)
+                        || target.endsWith(key)
+                        || key.includes(target)
+                    )
+                );
+            };
+
+            const pageHeight = Math.max(
+                document.documentElement.scrollHeight || 0,
+                document.body?.scrollHeight || 0
+            );
+            if (pageHeight <= maxHeight) {
+                return { folded: false, height: pageHeight, reason: 'within-limit' };
+            }
+
+            const tables = Array.from(document.querySelectorAll('table'))
+                .filter((table) => compact(table.innerText).includes(productKey));
+            let table = null;
+            let rows = [];
+            let headerIndex = -1;
+            let targetDataIndex = -1;
+
+            for (const candidate of tables) {
+                const candidateRows = Array.from(candidate.querySelectorAll('tr'));
+                let candidateHeader = -1;
+                for (let i = 0; i < Math.min(candidateRows.length, 8); i += 1) {
+                    if (compact(candidateRows[i].innerText).includes(productKey)) {
+                        candidateHeader = i;
+                        break;
+                    }
+                }
+                if (candidateHeader < 0) continue;
+
+                const dataRows = candidateRows.slice(candidateHeader + 1);
+                const found = dataRows.findIndex((row) => {
+                    const first = row.querySelector('th, td');
+                    return first && matches(first.innerText || first.textContent);
+                });
+                if (found >= 0) {
+                    table = candidate;
+                    rows = candidateRows;
+                    headerIndex = candidateHeader;
+                    targetDataIndex = found;
+                    break;
+                }
+            }
+
+            if (!table || targetDataIndex < 0) {
+                return { folded: false, height: pageHeight, reason: 'target-not-found' };
+            }
+
+            const dataRows = rows.slice(headerIndex + 1);
+            const dataCount = dataRows.length;
+            const keep = new Set();
+
+            // Keep the province summary at the top for context.
+            if (dataCount) keep.add(0);
+
+            // Keep enough neighboring rows to make the target row easy to verify.
+            const radius = 3;
+            const start = Math.max(0, targetDataIndex - radius);
+            const end = Math.min(dataCount - 1, targetDataIndex + radius);
+            for (let i = start; i <= end; i += 1) keep.add(i);
+
+            // If this would barely shorten the page, keep the original official view.
+            if (keep.size >= dataCount - 2) {
+                return { folded: false, height: pageHeight, reason: 'little-to-omit' };
+            }
+
+            const omittedRanges = [];
+            let rangeStart = null;
+            for (let i = 0; i < dataCount; i += 1) {
+                if (!keep.has(i) && rangeStart === null) rangeStart = i;
+                const atEnd = i === dataCount - 1;
+                if (rangeStart !== null && (keep.has(i) || atEnd)) {
+                    const rangeEnd = keep.has(i) ? i - 1 : i;
+                    omittedRanges.push([rangeStart, rangeEnd]);
+                    rangeStart = null;
+                }
+            }
+
+            // Hide omitted rows first.
+            for (let i = 0; i < dataCount; i += 1) {
+                if (!keep.has(i)) dataRows[i].style.setProperty('display', 'none', 'important');
+            }
+
+            const colCount = Math.max(
+                1,
+                ...rows.map((row) => row.querySelectorAll('th, td').length)
+            );
+            for (const [from, to] of omittedRanges) {
+                const count = to - from + 1;
+                const marker = document.createElement('tr');
+                marker.setAttribute('data-opinet-fold-marker', '1');
+                const cell = document.createElement('td');
+                cell.colSpan = colCount;
+                cell.textContent = `※ 동일 오피넷 조회결과 중 ${count}개 지역 행 생략`;
+                cell.style.setProperty('text-align', 'center', 'important');
+                cell.style.setProperty('font-weight', '700', 'important');
+                cell.style.setProperty('color', '#475569', 'important');
+                cell.style.setProperty('background', '#f8fafc', 'important');
+                cell.style.setProperty('border-top', '1px dashed #94a3b8', 'important');
+                cell.style.setProperty('border-bottom', '1px dashed #94a3b8', 'important');
+                cell.style.setProperty('padding', '10px 6px', 'important');
+                marker.appendChild(cell);
+
+                const nextVisibleIndex = Array.from(keep)
+                    .filter((idx) => idx > to)
+                    .sort((a, b) => a - b)[0];
+                if (nextVisibleIndex !== undefined) {
+                    dataRows[nextVisibleIndex].parentNode.insertBefore(
+                        marker,
+                        dataRows[nextVisibleIndex]
+                    );
+                } else {
+                    dataRows[dataRows.length - 1].parentNode.appendChild(marker);
+                }
+            }
+
+            const note = document.createElement('div');
+            note.setAttribute('data-opinet-fold-note', '1');
+            note.textContent =
+                '※ 정산서 가독성을 위해 동일 조회결과의 일부 지역 행을 생략하여 표시했습니다.';
+            note.style.setProperty('margin', '8px 0 0', 'important');
+            note.style.setProperty('font-size', '12px', 'important');
+            note.style.setProperty('color', '#475569', 'important');
+            table.insertAdjacentElement('afterend', note);
+
+            window.scrollTo(0, 0);
+            return {
+                folded: true,
+                height: pageHeight,
+                targetIndex: targetDataIndex,
+                dataCount,
+                keptCount: keep.size,
+                omittedCount: dataCount - keep.size,
+            };
+        }
+        """,
+        {"productLabel": product_label, "target": target, "maxHeight": max_height_px},
+    )
+    if result and result.get("folded"):
+        await page.wait_for_timeout(180)
+        return True
+    return False
+
+
 async def capture_opinet_evidence_comparison(
     travel_date: date,
     province_name: str,
@@ -783,6 +961,7 @@ async def capture_opinet_evidence_comparison(
         print_page = await _open_print_view(page)
         await _assert_evidence_date(print_page, travel_date)
         await _expand_print_result(print_page, product_label)
+        await _fold_print_result(print_page, product_label, target_sigungu)
         try:
             await _highlight_evidence_target(
                 print_page,
@@ -844,6 +1023,7 @@ async def query_opinet_region_prices(
     evidence_dir: str = "/tmp/evidence",
     highlight_sigungu: str | None = None,
     highlight_expected_price: float | None = None,
+    evidence_view: str = "current",
 ) -> OpinetRegionResult:
     if vehicle_type not in {"gasoline", "diesel", "lpg"}:
         raise ValueError("OPINET 조회 대상 차량이 아닙니다.")
@@ -880,18 +1060,39 @@ async def query_opinet_region_prices(
         if normalized_highlight_sigungu:
             await _bring_sigungu_into_view(page, product_label, normalized_highlight_sigungu)
         prices = await _extract_region_price_table(page, product_label)
-        if normalized_highlight_sigungu:
-            try:
-                await _highlight_evidence_target(
-                    page,
+        if evidence_view == "print":
+            print_page = await _open_print_view(page)
+            await _assert_evidence_date(print_page, travel_date)
+            await _expand_print_result(print_page, product_label)
+            if normalized_highlight_sigungu:
+                await _fold_print_result(
+                    print_page,
                     product_label,
                     normalized_highlight_sigungu,
-                    highlight_expected_price,
                 )
-            except Exception:
-                # Highlighting is presentation-only; never block a valid evidence capture.
-                pass
-        await page.screenshot(path=str(evidence_path), full_page=True)
+                try:
+                    await _highlight_evidence_target(
+                        print_page,
+                        product_label,
+                        normalized_highlight_sigungu,
+                        highlight_expected_price,
+                    )
+                except Exception:
+                    pass
+            await print_page.screenshot(path=str(evidence_path), full_page=True)
+        else:
+            if normalized_highlight_sigungu:
+                try:
+                    await _highlight_evidence_target(
+                        page,
+                        product_label,
+                        normalized_highlight_sigungu,
+                        highlight_expected_price,
+                    )
+                except Exception:
+                    # Highlighting is presentation-only; never block a valid evidence capture.
+                    pass
+            await page.screenshot(path=str(evidence_path), full_page=True)
         await browser.close()
 
     return OpinetRegionResult(
