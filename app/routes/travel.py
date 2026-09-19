@@ -3,6 +3,9 @@ import binascii
 import os
 import shutil
 import tempfile
+import zipfile
+from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -15,6 +18,7 @@ from app.models import (
     PriceResponse,
     TravelRequest,
 )
+from app.browser.opinet_browser import capture_opinet_evidence_comparison
 from app.services.opinet_api_service import check_opinet_api_status
 from app.services.opinet_evidence_service import generate_opinet_evidence
 from app.services.pdf_service import generate_estimate_pdf, generate_regulation_pdf
@@ -96,6 +100,53 @@ async def price(req: PriceRequest):
     try:
         return await resolve_price(req)
     except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/opinet-evidence-compare.zip")
+async def opinet_evidence_compare(
+    background_tasks: BackgroundTasks,
+    travel_date: date,
+    sigungu: str = "수원시",
+    vehicle_type: Literal["gasoline", "diesel", "lpg"] = "gasoline",
+):
+    """Temporary diagnostic: compare current OPINET capture with official print view."""
+    evidence_dir = tempfile.mkdtemp(prefix="opinet_compare_")
+    zip_path = os.path.join(evidence_dir, "opinet_compare_gyeonggi.zip")
+    try:
+        result = await capture_opinet_evidence_comparison(
+            travel_date=travel_date,
+            province_name="경기도",
+            sigungu_name=sigungu,
+            vehicle_type=vehicle_type,
+            evidence_dir=evidence_dir,
+        )
+        current_size = os.path.getsize(result.current_path)
+        print_size = os.path.getsize(result.print_path)
+        note = (
+            f"지역: 경기도 {sigungu}\n"
+            f"일자: {travel_date.isoformat()}\n"
+            f"유종: {vehicle_type} ({result.product_label})\n"
+            f"현재 화면 PNG: {current_size:,} bytes\n"
+            f"화면인쇄 PNG: {print_size:,} bytes\n"
+            f"화면인쇄 URL: {result.print_url}\n"
+        )
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.write(result.current_path, arcname=os.path.basename(result.current_path))
+            zf.write(result.print_path, arcname=os.path.basename(result.print_path))
+            zf.writestr("00_compare_info.txt", note)
+
+        background_tasks.add_task(shutil.rmtree, evidence_dir, ignore_errors=True)
+        return FileResponse(
+            zip_path,
+            media_type="application/zip",
+            filename=(
+                f"opinet_compare_gyeonggi_{sigungu}_"
+                f"{travel_date.isoformat()}_{vehicle_type}.zip"
+            ),
+        )
+    except Exception as e:
+        shutil.rmtree(evidence_dir, ignore_errors=True)
         raise HTTPException(status_code=400, detail=str(e))
 
 
