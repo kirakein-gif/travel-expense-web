@@ -161,9 +161,9 @@ def calculate_allowances(
             meal_base = _won(MEAL_ALLOWANCE_RATE * Decimal(days))
             meal_allowance = max(meal_base - meal_claim_amount, 0)
             meal_note = (
-                f"비합숙 · 25,000원 × {days}일 - 교육훈련기관 증식비 청구액 {meal_claim_amount:,}원"
+                f"비합숙 · 25,000원 × {days}일 - 교육훈련기관 중식비 청구액 {meal_claim_amount:,}원"
                 if meal_claim_amount
-                else f"비합숙 · 25,000원 × {days}일 · 증식비 미청구"
+                else f"비합숙 · 25,000원 × {days}일 · 중식비 미청구"
             )
 
         boarding_label = "합숙" if training_boarding else "비합숙"

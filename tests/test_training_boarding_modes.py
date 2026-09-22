@@ -52,10 +52,10 @@ def test_training_nonboarding_middle_day_half_and_meal_claim_deduction():
     assert result["daily_allowance"] == 62500
     assert result["meal_allowance"] == 57000
     assert "중간 1일 50%" in result["daily_note"]
-    assert "증식비 청구액 18,000원" in result["meal_note"]
+    assert "중식비 청구액 18,000원" in result["meal_note"]
 
 
 def test_training_nonboarding_no_meal_claim_gets_full_meal_allowance():
     result = calculate_allowances(training_boarding=False, **BASE)
     assert result["meal_allowance"] == 75000
-    assert "증식비 미청구" in result["meal_note"]
+    assert "중식비 미청구" in result["meal_note"]

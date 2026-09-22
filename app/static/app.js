@@ -240,10 +240,10 @@ function updateTraining(){
   $("trainingTripHint").textContent=boarding
     ? d+"일 교육 · 합숙 · 왕복 1회"
     : d+"일 교육 · 비합숙 · 왕복 1회";
-  $("trainingMealClaimLabel").textContent=boarding?"교육기관 식비 청구액":"교육기관 증식비 청구액";
+  $("trainingMealClaimLabel").textContent=boarding?"교육기관 식비 청구액":"교육기관 중식비 청구액";
   $("trainingMealClaimHelp").textContent=boarding
     ?"합숙: 교육훈련기관이 청구한 식비 금액을 그대로 입력"
-    :"비합숙: 교육훈련기관 증식비 청구액을 입력 · 미청구 시 0원";
+    :"비합숙: 교육훈련기관 중식비 청구액을 입력 · 미청구 시 0원";
   updatePreview();
 }
 function updatePreview(){
