@@ -85,7 +85,7 @@ function evidenceCanPrefetch(payload){
   const spec=currentVehicleSpec(),today=seoulToday();
   return Boolean(
     lastDistance && lastDistance.outside_travel_eligible &&
-    spec.evidence && !payload.public_vehicle &&
+    spec.evidence && !payload.public_vehicle && !payload.no_vehicle &&
     !trainingSameWorkArea(payload) &&
     payload.travel_date && payload.travel_date<today
   );
@@ -190,10 +190,22 @@ function clearDistanceReview(){
   $("scopeAlert").className="scope-alert hidden"; $("scopeAlert").textContent="";
   clearPriceReview();
 }
+function setForcedDisabled(id,disabled){
+  const el=$(id);
+  el.disabled=disabled;
+  el.style.background=disabled?"#eef2f6":"";
+  el.style.color=disabled?"#94a3b8":"";
+  el.style.borderColor=disabled?"#d8e0e8":"";
+  el.style.cursor=disabled?"not-allowed":"";
+}
 function updateVehicle(){
-  const type=$("vehicle_type").value, s=currentVehicleSpec();
-  $("phevEnergyWrap").classList.toggle("hidden",type!=="phev");
-  $("efficiency").value=s.efficiency+" "+s.unit;
+  const type=$("vehicle_type").value, s=currentVehicleSpec(), noVehicle=$("no_vehicle").checked;
+  $("phevEnergyWrap").classList.toggle("hidden",noVehicle||type!=="phev");
+  setForcedDisabled("vehicle_type",noVehicle);
+  setForcedDisabled("efficiency",noVehicle);
+  $("round_trip").disabled=noVehicle;
+  $("roundTripWrap").style.opacity=noVehicle?".5":"";
+  $("efficiency").value=noVehicle?"-":s.efficiency+" "+s.unit;
   updateManualPriceVisibility(); updatePreview();
 }
 function suggestedTrainingTrips(){
@@ -218,8 +230,9 @@ function updateTripType(){
   const training=$("trip_type").value==="training";
   $("normalOptions").classList.toggle("hidden",training);
   $("trainingOptions").classList.toggle("hidden",!training);
+  $("normalStayWrap").classList.toggle("hidden",training||days()===1);
   $("roundTripWrap").classList.toggle("hidden",training);
-  updateTraining(); updateManualPriceVisibility(); updatePreview();
+  updateTraining(); updateCostInputs(); updateManualPriceVisibility(); updatePreview();
 }
 function updateTraining(){
   const mode=$("training_stay_mode").value, d=days(), r=suggestedTrainingTrips();
@@ -234,18 +247,27 @@ function updatePreview(){
   $("preview_type").textContent=$("trip_type").value==="training"?"교육훈련":"일반출장";
 }
 function updateCostInputs(){
-  const publicVehicle=$("public_vehicle").checked;
-  const sameDay=days()===1;
+  const noVehicle=$("no_vehicle").checked;
+  if(noVehicle)$("public_vehicle").checked=false;
+  $("public_vehicle").disabled=noVehicle;
+  const publicLabel=$("public_vehicle").closest("label");
+  if(publicLabel)publicLabel.style.opacity=noVehicle?".5":"";
 
-  if(publicVehicle){
+  const publicVehicle=$("public_vehicle").checked;
+  const vehicleCostDisabled=noVehicle||publicVehicle;
+  if(vehicleCostDisabled){
     $("toll_fee").value="0";
     $("parking_fee").value="0";
   }
-  $("toll_fee").disabled=publicVehicle;
-  $("parking_fee").disabled=publicVehicle;
+  setForcedDisabled("toll_fee",vehicleCostDisabled);
+  setForcedDisabled("parking_fee",vehicleCostDisabled);
 
-  if(sameDay)$("lodging_fee").value="0";
-  $("lodging_fee").disabled=sameDay;
+  const sameDay=days()===1;
+  const training=$("trip_type").value==="training";
+  const stayMode=training?$("training_stay_mode").value:$("normal_stay_mode").value;
+  const lodgingAllowed=!sameDay&&stayMode!=="nonresidential";
+  if(!lodgingAllowed)$("lodging_fee").value="0";
+  setForcedDisabled("lodging_fee",!lodgingAllowed);
 }
 function basePayload(){
   const type=$("vehicle_type").value, spec=currentVehicleSpec(), manual=Number($("manual_energy_price").value||0);
@@ -253,9 +275,10 @@ function basePayload(){
     travel_date:$("travel_date").value,end_date:$("end_date").value,origin:$("origin").value,destination:$("destination").value,
     purpose:$("purpose").value||null,vehicle_type:type,phev_energy_source:type==="phev"?$("phev_energy_source").value:null,
     efficiency:spec.efficiency,manual_energy_price:manual>0?manual:null,round_trip:$("round_trip").checked,
-    trip_type:$("trip_type").value,public_vehicle:$("public_vehicle").checked,provided_meals_count:Number($("provided_meals_count").value||0),
+    trip_type:$("trip_type").value,no_vehicle:$("no_vehicle").checked,public_vehicle:$("public_vehicle").checked,provided_meals_count:Number($("provided_meals_count").value||0),
+    normal_stay_mode:$("normal_stay_mode").value,
     training_stay_mode:$("training_stay_mode").value,training_round_trips:$("trip_type").value==="training"&&$("training_stay_mode").value==="custom"?Number($("training_round_trips").value||1):null,
-    training_meal_claim_count:Number($("training_meal_claim_count").value||0),toll_fee:$("public_vehicle").checked?0:Number($("toll_fee").value||0),parking_fee:$("public_vehicle").checked?0:Number($("parking_fee").value||0),lodging_fee:days()===1?0:Number($("lodging_fee").value||0),
+    training_meal_claim_count:Number($("training_meal_claim_count").value||0),toll_fee:($("public_vehicle").checked||$("no_vehicle").checked)?0:Number($("toll_fee").value||0),parking_fee:($("public_vehicle").checked||$("no_vehicle").checked)?0:Number($("parking_fee").value||0),lodging_fee:$("lodging_fee").disabled?0:Number($("lodging_fee").value||0),
     affiliation:$("affiliation").value||null,position:$("position").value||null,traveler_name:$("traveler_name").value||null,passengers:$("passengers").value.trim()||null
   };
 }
@@ -265,8 +288,8 @@ function trainingSameWorkArea(payload){
   const origin=normSigungu(lastDistance.origin_sigungu), dest=normSigungu(lastDistance.sigungu);
   return Boolean(origin)&&origin===dest;
 }
-function requiresOpinetPrice(payload){ return Boolean(currentVehicleSpec().evidence)&&!payload.public_vehicle&&!trainingSameWorkArea(payload); }
-function requiresHydrogenPrice(payload){ return currentVehicleSpec().unit==="km/kg"&&!payload.public_vehicle&&!trainingSameWorkArea(payload); }
+function requiresOpinetPrice(payload){ return Boolean(currentVehicleSpec().evidence)&&!payload.public_vehicle&&!payload.no_vehicle&&!trainingSameWorkArea(payload); }
+function requiresHydrogenPrice(payload){ return currentVehicleSpec().unit==="km/kg"&&!payload.public_vehicle&&!payload.no_vehicle&&!trainingSameWorkArea(payload); }
 function updateManualPriceVisibility(){
   const payload=basePayload();
   const hydrogen=requiresHydrogenPrice(payload);
@@ -352,7 +375,9 @@ dz.addEventListener("drop",e=>uploadTravelPdf(e.dataTransfer.files[0]));
 [$("vehicle_type"),$("phev_energy_source")].forEach(el=>el.addEventListener("change",()=>{$("manual_energy_price").value="";invalidateEvidenceCache();clearPriceReview();updateVehicle();}));
 [$("trip_type"),$("round_trip")].forEach(el=>el.addEventListener("change",()=>{clearPriceReview();updateTripType();}));
 [$("travel_date"),$("end_date")].forEach(el=>el.addEventListener("change",()=>{invalidateEvidenceCache();clearPriceReview();populateMealCounts();updateCostInputs();updateTripType();updateManualPriceVisibility();}));
-[$("training_stay_mode"),$("training_round_trips")].forEach(el=>el.addEventListener("change",()=>{clearPriceReview();updateTraining();updateManualPriceVisibility();}));
+[$("training_stay_mode"),$("training_round_trips")].forEach(el=>el.addEventListener("change",()=>{updateCostInputs();clearPriceReview();updateTraining();updateManualPriceVisibility();}));
+$("normal_stay_mode").addEventListener("change",()=>{updateCostInputs();clearPriceReview();});
+$("no_vehicle").addEventListener("change",()=>{$("manual_energy_price").value="";invalidateEvidenceCache();updateCostInputs();clearPriceReview();updateVehicle();});
 $("public_vehicle").addEventListener("change",()=>{updateCostInputs();clearPriceReview();updateManualPriceVisibility();});
 ["training_meal_claim_count","provided_meals_count","toll_fee","parking_fee","lodging_fee","manual_energy_price"].forEach(id=>$(id).addEventListener("change",()=>{clearPriceReview();updateManualPriceVisibility();}));
 ["origin","destination"].forEach(id=>$(id).addEventListener("input",clearDistanceReview));
@@ -402,7 +427,7 @@ $("calculateButton").addEventListener("click",async()=>{
     const pp={...payload,distance_km:lastDistance.distance_km,one_way_distance_km:lastDistance.one_way_distance_km,province:lastDistance.province,sigungu:lastDistance.sigungu,origin_sigungu:lastDistance.origin_sigungu};
     const r=await fetch("/api/price",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pp)}),data=await r.json();if(!r.ok)throw new Error(data.detail||"여비 계산 실패");lastPayload=payload;
     $("final_round_trips").textContent=data.round_trip_count===0.5?"편도":fmt(data.round_trip_count)+"회";$("final_transport_distance").textContent=fmt(data.transport_distance_km)+" km";
-    $("vehicle_spec").textContent=(data.vehicle_label||currentVehicleSpec().label)+" · "+(data.effective_efficiency||currentVehicleSpec().efficiency)+" "+(data.efficiency_unit||currentVehicleSpec().unit);
+    $("vehicle_spec").textContent=data.evidence_status==="no_vehicle"?"차량 없음":(data.vehicle_label||currentVehicleSpec().label)+" · "+(data.effective_efficiency||currentVehicleSpec().efficiency)+" "+(data.efficiency_unit||currentVehicleSpec().unit);
     let basisLabel="출장 첫째 날";
     if(data.evidence_status==="manual_price") basisLabel="수동입력";
     else if(data.evidence_status==="manual_hydrogen_price") basisLabel="수소단가 직접입력";
@@ -428,6 +453,7 @@ $("calculateButton").addEventListener("click",async()=>{
       lastEvidencePayload=null;$("evidenceButton").disabled=true;
       if(data.evidence_status==="official_ev_rate") $("evidence").textContent="무공해차 누리집 기준단가 자동 적용";
       else if(data.evidence_status==="manual_hydrogen_price") $("evidence").textContent="수소단가 직접입력";
+      else if(data.evidence_status==="no_vehicle") $("evidence").textContent="차량 없음 · 유가조회 생략";
       else $("evidence").textContent=data.evidence_status;
     }
     $("pdfButton").disabled=false;$("regulationPdfButton").disabled=false;$("outputActions").classList.remove("hidden");$("tab2check").textContent="✓";setResultState("최종 산출 완료","done");

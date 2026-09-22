@@ -8,6 +8,7 @@ VehicleType = Literal[
 ]
 PhevEnergySource = Literal["gasoline", "electric"]
 TripType = Literal["normal", "training"]
+NormalStayMode = Literal["nonresidential", "residential"]
 TrainingStayMode = Literal["nonresidential", "residential", "custom"]
 
 
@@ -23,8 +24,10 @@ class TravelRequest(BaseModel):
     round_trip: bool = True
 
     trip_type: TripType = "normal"
+    no_vehicle: bool = False
     public_vehicle: bool = False
     provided_meals_count: int = Field(default=0, ge=0)
+    normal_stay_mode: NormalStayMode = "nonresidential"
     training_stay_mode: TrainingStayMode = "nonresidential"
     training_round_trips: Optional[int] = Field(default=None, ge=1)
     training_meal_claim_count: int = Field(default=0, ge=0)
@@ -79,8 +82,10 @@ class PriceRequest(BaseModel):
     origin_sigungu: str = ""
 
     trip_type: TripType = "normal"
+    no_vehicle: bool = False
     public_vehicle: bool = False
     provided_meals_count: int = Field(default=0, ge=0)
+    normal_stay_mode: NormalStayMode = "nonresidential"
     training_stay_mode: TrainingStayMode = "nonresidential"
     training_round_trips: Optional[int] = Field(default=None, ge=1)
     training_meal_claim_count: int = Field(default=0, ge=0)

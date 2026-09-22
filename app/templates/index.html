@@ -105,7 +105,12 @@
                 </select>
               </div>
 
-              <div class="section-label">차량</div>
+              <div class="section-label section-label-inline">
+                <span>차량</span>
+                <label class="check" style="margin:0;color:#52657d;font-size:13px;font-weight:700">
+                  <input id="no_vehicle" type="checkbox">차량 없음
+                </label>
+              </div>
               <div class="form-row">
                 <label for="vehicle_type">차량 종류</label>
                 <select id="vehicle_type">
@@ -146,6 +151,16 @@
               <h2>2. 여비 상세</h2>
               <div id="normalOptions">
                 <div class="section-label">일반출장</div>
+                <div id="normalStayWrap" class="form-row form-row-help hidden">
+                  <label for="normal_stay_mode">숙박 여부</label>
+                  <div>
+                    <select id="normal_stay_mode">
+                      <option value="nonresidential">비숙박 · 매일 왕복</option>
+                      <option value="residential">숙박 · 왕복 1회</option>
+                    </select>
+                    <span class="help compact-help">숙박 시 첫날 출발·마지막날 귀가 기준으로 자동차 운임 왕복 1회</span>
+                  </div>
+                </div>
                 <div class="form-row form-row-help">
                   <label for="provided_meals_count">제공 식사 수</label>
                   <div>

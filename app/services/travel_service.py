@@ -197,15 +197,21 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         end_date=req.end_date,
         trip_type=req.trip_type,
         round_trip=req.round_trip,
+        normal_stay_mode=req.normal_stay_mode,
         training_stay_mode=req.training_stay_mode,
         training_round_trips=req.training_round_trips,
     )
+
+    effective_public_vehicle = req.public_vehicle and not req.no_vehicle
+    if req.no_vehicle:
+        transport_km = 0.0
+        round_trips = 0.0
 
     allowances = calculate_allowances(
         start_date=req.travel_date,
         end_date=req.end_date,
         trip_type=req.trip_type,
-        public_vehicle=req.public_vehicle,
+        public_vehicle=effective_public_vehicle,
         provided_meals_count=req.provided_meals_count,
         training_stay_mode=req.training_stay_mode,
         training_round_trips=req.training_round_trips,
@@ -214,15 +220,27 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         destination_sigungu=req.sigungu,
     )
 
-    effective_toll_fee = 0 if req.public_vehicle else req.toll_fee
-    effective_parking_fee = 0 if req.public_vehicle else req.parking_fee
-    effective_lodging_fee = 0 if allowances["trip_days"] <= 1 else req.lodging_fee
+    vehicle_cost_disabled = req.no_vehicle or effective_public_vehicle
+    effective_toll_fee = 0 if vehicle_cost_disabled else req.toll_fee
+    effective_parking_fee = 0 if vehicle_cost_disabled else req.parking_fee
+    stay_mode = req.training_stay_mode if req.trip_type == "training" else req.normal_stay_mode
+    lodging_allowed = allowances["trip_days"] > 1 and stay_mode != "nonresidential"
+    effective_lodging_fee = req.lodging_fee if lodging_allowed else 0
 
     amount = None
     unit_cost = None
     formula = None
 
-    if req.public_vehicle:
+    if req.no_vehicle:
+        price_result = {
+            "price": None,
+            "source": "차량 없음 · 단가조회 생략",
+            "evidence_status": "no_vehicle",
+            "cache_hit": False,
+        }
+        amount = 0
+        formula = "차량 없음: 자동차운임 지급하지 않음"
+    elif effective_public_vehicle:
         price_result = {
             "price": None,
             "source": "공용차량 이용 · 단가조회 생략",
@@ -307,9 +325,9 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         price_cache_hit=bool(price_result.get("cache_hit")),
         evidence_status=price_result["evidence_status"],
         fuel_price_date=(price_result.get("effective_from") or req.travel_date) if price_result["price"] is not None else None,
-        vehicle_label=spec.label,
-        effective_efficiency=float(spec.efficiency),
-        efficiency_unit=spec.efficiency_unit,
+        vehicle_label="차량 없음" if req.no_vehicle else spec.label,
+        effective_efficiency=None if req.no_vehicle else float(spec.efficiency),
+        efficiency_unit=None if req.no_vehicle else spec.efficiency_unit,
         calculation_formula=formula,
         transport_unit_cost=unit_cost,
         transport_distance_km=transport_km,
@@ -347,8 +365,10 @@ async def estimate_travel(req: TravelRequest) -> EstimateResponse:
             sigungu=distance.sigungu,
             origin_sigungu=distance.origin_sigungu,
             trip_type=req.trip_type,
+            no_vehicle=req.no_vehicle,
             public_vehicle=req.public_vehicle,
             provided_meals_count=req.provided_meals_count,
+            normal_stay_mode=req.normal_stay_mode,
             training_stay_mode=req.training_stay_mode,
             training_round_trips=req.training_round_trips,
             training_meal_claim_count=req.training_meal_claim_count,
