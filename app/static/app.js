@@ -233,6 +233,20 @@ function updatePreview(){
   $("preview_days").textContent=days()+"일";
   $("preview_type").textContent=$("trip_type").value==="training"?"교육훈련":"일반출장";
 }
+function updateCostInputs(){
+  const publicVehicle=$("public_vehicle").checked;
+  const sameDay=days()===1;
+
+  if(publicVehicle){
+    $("toll_fee").value="0";
+    $("parking_fee").value="0";
+  }
+  $("toll_fee").disabled=publicVehicle;
+  $("parking_fee").disabled=publicVehicle;
+
+  if(sameDay)$("lodging_fee").value="0";
+  $("lodging_fee").disabled=sameDay;
+}
 function basePayload(){
   const type=$("vehicle_type").value, spec=currentVehicleSpec(), manual=Number($("manual_energy_price").value||0);
   return {
@@ -241,7 +255,7 @@ function basePayload(){
     efficiency:spec.efficiency,manual_energy_price:manual>0?manual:null,round_trip:$("round_trip").checked,
     trip_type:$("trip_type").value,public_vehicle:$("public_vehicle").checked,provided_meals_count:Number($("provided_meals_count").value||0),
     training_stay_mode:$("training_stay_mode").value,training_round_trips:$("trip_type").value==="training"&&$("training_stay_mode").value==="custom"?Number($("training_round_trips").value||1):null,
-    training_meal_claim_count:Number($("training_meal_claim_count").value||0),toll_fee:Number($("toll_fee").value||0),parking_fee:Number($("parking_fee").value||0),lodging_fee:Number($("lodging_fee").value||0),
+    training_meal_claim_count:Number($("training_meal_claim_count").value||0),toll_fee:$("public_vehicle").checked?0:Number($("toll_fee").value||0),parking_fee:$("public_vehicle").checked?0:Number($("parking_fee").value||0),lodging_fee:days()===1?0:Number($("lodging_fee").value||0),
     affiliation:$("affiliation").value||null,position:$("position").value||null,traveler_name:$("traveler_name").value||null,passengers:$("passengers").value.trim()||null
   };
 }
@@ -306,7 +320,7 @@ function applyTrip(){
   $("travel_date").value=selectedTrip.start_date; $("end_date").value=selectedTrip.end_date;
   $("origin").value=importData.affiliation||$("origin").value; $("destination").value=selectedTrip.destination||"";
   $("purpose").value=selectedTrip.purpose||""; $("affiliation").value=importData.affiliation||"";
-  populateMealCounts();
+  populateMealCounts(); updateCostInputs();
   $("applicantSelect").innerHTML="";
   selectedTrip.participants.forEach(p=>{const opt=document.createElement("option");opt.value=p.name;opt.textContent=p.name+" · "+(p.position||"직급 미확인");$("applicantSelect").appendChild(opt);});
   if(selectedTrip.default_applicant)$("applicantSelect").value=selectedTrip.default_applicant;
@@ -337,13 +351,14 @@ dz.addEventListener("drop",e=>uploadTravelPdf(e.dataTransfer.files[0]));
 
 [$("vehicle_type"),$("phev_energy_source")].forEach(el=>el.addEventListener("change",()=>{$("manual_energy_price").value="";invalidateEvidenceCache();clearPriceReview();updateVehicle();}));
 [$("trip_type"),$("round_trip")].forEach(el=>el.addEventListener("change",()=>{clearPriceReview();updateTripType();}));
-[$("travel_date"),$("end_date")].forEach(el=>el.addEventListener("change",()=>{invalidateEvidenceCache();clearPriceReview();populateMealCounts();updateTripType();updateManualPriceVisibility();}));
+[$("travel_date"),$("end_date")].forEach(el=>el.addEventListener("change",()=>{invalidateEvidenceCache();clearPriceReview();populateMealCounts();updateCostInputs();updateTripType();updateManualPriceVisibility();}));
 [$("training_stay_mode"),$("training_round_trips")].forEach(el=>el.addEventListener("change",()=>{clearPriceReview();updateTraining();updateManualPriceVisibility();}));
-["training_meal_claim_count","provided_meals_count","public_vehicle","toll_fee","parking_fee","lodging_fee","manual_energy_price"].forEach(id=>$(id).addEventListener("change",()=>{clearPriceReview();updateManualPriceVisibility();}));
+$("public_vehicle").addEventListener("change",()=>{updateCostInputs();clearPriceReview();updateManualPriceVisibility();});
+["training_meal_claim_count","provided_meals_count","toll_fee","parking_fee","lodging_fee","manual_energy_price"].forEach(id=>$(id).addEventListener("change",()=>{clearPriceReview();updateManualPriceVisibility();}));
 ["origin","destination"].forEach(id=>$(id).addEventListener("input",clearDistanceReview));
 
 const today=seoulToday(); $("travel_date").value=today; $("end_date").value=today;
-populateMealCounts(); updateVehicle(); updateTripType(); updateManualPriceVisibility(); updatePreview();
+populateMealCounts(); updateCostInputs(); updateVehicle(); updateTripType(); updateManualPriceVisibility(); updatePreview();
 $("distanceNextButton").addEventListener("click",()=>{if(lastDistance&&lastDistance.outside_travel_eligible)setTab(2);});
 
 $("distanceButton").addEventListener("click",async()=>{

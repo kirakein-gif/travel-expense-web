@@ -214,6 +214,10 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         destination_sigungu=req.sigungu,
     )
 
+    effective_toll_fee = 0 if req.public_vehicle else req.toll_fee
+    effective_parking_fee = 0 if req.public_vehicle else req.parking_fee
+    effective_lodging_fee = 0 if allowances["trip_days"] <= 1 else req.lodging_fee
+
     amount = None
     unit_cost = None
     formula = None
@@ -291,9 +295,9 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
             amount
             + allowances["daily_allowance"]
             + allowances["meal_allowance"]
-            + req.toll_fee
-            + req.parking_fee
-            + req.lodging_fee
+            + effective_toll_fee
+            + effective_parking_fee
+            + effective_lodging_fee
         )
 
     return PriceResponse(
@@ -313,9 +317,9 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         trip_days=allowances["trip_days"],
         daily_allowance=allowances["daily_allowance"],
         meal_allowance=allowances["meal_allowance"],
-        toll_fee=req.toll_fee,
-        parking_fee=req.parking_fee,
-        lodging_fee=req.lodging_fee,
+        toll_fee=effective_toll_fee,
+        parking_fee=effective_parking_fee,
+        lodging_fee=effective_lodging_fee,
         total_expense=total,
         training_scope=allowances["training_scope"],
         daily_note=allowances["daily_note"],

@@ -49,3 +49,36 @@ def test_hydrogen_uses_manual_price():
 def test_hydrogen_requires_manual_price():
     with pytest.raises(ValueError, match="수소차"):
         asyncio.run(resolve_price(_request(vehicle_type="hydrogen")))
+
+
+def test_public_vehicle_clears_toll_and_parking_but_keeps_multiday_lodging():
+    result = asyncio.run(
+        resolve_price(
+            _request(
+                end_date=date(2026, 9, 19),
+                public_vehicle=True,
+                toll_fee=12000,
+                parking_fee=5000,
+                lodging_fee=40000,
+            )
+        )
+    )
+    assert result.estimated_transport_cost == 0
+    assert result.toll_fee == 0
+    assert result.parking_fee == 0
+    assert result.lodging_fee == 40000
+
+
+def test_same_day_clears_lodging_fee():
+    result = asyncio.run(
+        resolve_price(
+            _request(
+                toll_fee=1000,
+                parking_fee=2000,
+                lodging_fee=50000,
+            )
+        )
+    )
+    assert result.toll_fee == 1000
+    assert result.parking_fee == 2000
+    assert result.lodging_fee == 0
