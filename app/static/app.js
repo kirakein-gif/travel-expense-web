@@ -355,11 +355,15 @@ async function imageForPdf(file){
   ctx.drawImage(img,0,0,canvas.width,canvas.height);
   return canvas.toDataURL("image/jpeg",.9);
 }
+function tollRecognizedReceipts(){
+  return tollEvidenceItems.flatMap(item=>item.receipts||[]).filter(receipt=>receipt.amount!=null);
+}
 function syncTollOcrTotal(){
-  const all=tollEvidenceItems.flatMap(item=>item.candidates);
-  const sum=tollEvidenceItems.reduce((total,item)=>total+item.candidates.filter(c=>c.selected).reduce((s,c)=>s+Number(c.amount||0),0),0);
-  $("tollOcrSum").textContent="선택 합계 "+fmt(sum)+"원";
-  if(all.length){
+  const receipts=tollRecognizedReceipts();
+  const sum=receipts.reduce((total,receipt)=>total+Number(receipt.amount||0),0);
+  const reviewCount=tollEvidenceItems.flatMap(item=>item.receipts||[]).filter(receipt=>receipt.status!=="confirmed").length;
+  $("tollOcrSum").textContent="자동합계 "+fmt(sum)+"원"+(reviewCount?" · 확인 필요 "+reviewCount+"건":" · 확정");
+  if(receipts.length){
     tollOcrManaged=true;
     $("toll_fee").value=String(sum);
     clearPriceReview();
@@ -368,6 +372,10 @@ function syncTollOcrTotal(){
     tollOcrManaged=false;
     clearPriceReview();
   }
+}
+function tollSourceText(receipt){
+  return ["A","B","C"].filter(key=>receipt.sources&&receipt.sources[key]!=null)
+    .map(key=>key+" "+fmt(receipt.sources[key])+"원").join(" · ");
 }
 function renderTollEvidence(){
   const list=$("tollEvidenceList");
@@ -386,21 +394,36 @@ function renderTollEvidence(){
       renderTollEvidence();syncTollOcrTotal();clearPriceReview();
     });
     head.append(img,meta,remove);card.appendChild(head);
-    if(item.candidates.length){
-      const box=document.createElement("div");box.className="toll-candidates";
-      item.candidates.forEach(candidate=>{
-        const row=document.createElement("div");row.className="toll-candidate-row";
-        const check=document.createElement("input");check.type="checkbox";check.checked=candidate.selected;
-        check.addEventListener("change",()=>{candidate.selected=check.checked;tollOcrManaged=true;syncTollOcrTotal();});
-        const amount=document.createElement("input");amount.type="number";amount.min="0";amount.step="1";amount.value=String(candidate.amount);
-        amount.addEventListener("change",()=>{candidate.amount=Math.max(0,Number(amount.value||0));tollOcrManaged=true;syncTollOcrTotal();});
-        const line=document.createElement("span");line.className="toll-candidate-line";line.textContent=candidate.line||"OCR 금액 후보";
-        row.append(check,amount,line);box.appendChild(row);
+
+    if((item.receipts||[]).length){
+      const box=document.createElement("div");box.className="toll-receipts";
+      item.receipts.forEach(receipt=>{
+        const row=document.createElement("div");row.className="toll-receipt-row "+(receipt.status==="confirmed"?"confirmed":"review");
+        const left=document.createElement("div");left.className="toll-receipt-left";
+        const receiptTitle=document.createElement("strong");receiptTitle.textContent="영수증 "+receipt.receipt_index;
+        const detail=document.createElement("span");
+        const sourceText=tollSourceText(receipt);
+        detail.textContent=[receipt.vehicle_note,sourceText,receipt.note].filter(Boolean).join(" · ");
+        left.append(receiptTitle,detail);
+
+        const amount=document.createElement("b");amount.className="toll-receipt-amount";
+        amount.textContent=receipt.amount==null?"금액 미인식":fmt(receipt.amount)+"원";
+
+        const badge=document.createElement("em");badge.className="toll-verdict "+(receipt.status==="confirmed"?"confirmed":"review");
+        badge.textContent=receipt.status_label||"확인 필요";
+
+        row.append(left,amount,badge);
+        if(receipt.vehicle_warning){
+          const warning=document.createElement("div");warning.className="toll-vehicle-warning";
+          warning.textContent=(receipt.vehicle_class||"")+"종 인식 · 차종 확인";
+          row.appendChild(warning);
+        }
+        box.appendChild(row);
       });
       card.appendChild(box);
     }else if(item.status!=="OCR 분석 중..."){
       const empty=document.createElement("div");empty.className="toll-ocr-empty";
-      empty.textContent="금액을 자동으로 찾지 못했습니다. 증빙은 유지되며 통행료는 위 입력칸에 직접 입력할 수 있습니다.";
+      empty.textContent="금액 패턴을 자동 판정하지 못했습니다. 증빙은 유지되며 통행료 입력칸에서 직접 확인할 수 있습니다.";
       card.appendChild(empty);
     }
     list.appendChild(card);
@@ -412,21 +435,21 @@ async function addTollEvidenceFile(file){
   if(tollEvidenceItems.length>=MAX_TOLL_EVIDENCE){$("globalStatus").textContent="통행료 증빙은 최대 4장까지 첨부할 수 있습니다.";return;}
   if(file.size>8*1024*1024){$("globalStatus").textContent="통행료 증빙 이미지는 장당 8MB 이하만 사용할 수 있습니다.";return;}
 
-  const item={id:++tollEvidenceSeq,name:file.name||"클립보드 캡처",dataUrl:"",status:"OCR 분석 중...",candidates:[]};
+  const item={id:++tollEvidenceSeq,name:file.name||"클립보드 캡처",dataUrl:"",status:"OCR 분석 중...",receipts:[]};
   try{item.dataUrl=await imageForPdf(file);}catch(e){$("globalStatus").textContent=e.message;return;}
   tollEvidenceItems.push(item);renderTollEvidence();
-  $("globalStatus").textContent="통행료 증빙 OCR 분석 중...";
+  $("globalStatus").textContent="하이패스 영수증 패턴 분석 중...";
   try{
     const form=new FormData();form.append("file",file,file.name||"toll.png");
     const response=await fetch("/api/toll-evidence-ocr",{method:"POST",body:form});
     const data=await response.json();
     if(!response.ok)throw new Error(data.detail||"통행료 OCR 실패");
-    item.candidates=(data.candidates||[]).map(c=>({amount:Number(c.amount||0),line:c.line||"",selected:Boolean(c.recommended)}));
-    item.status=item.candidates.length?"금액 후보 "+item.candidates.length+"건 인식":"OCR 완료 · 금액 후보 없음";
+    item.receipts=data.receipts||[];
+    item.status=(data.recognized_count||0)+"건 금액 인식 · "+(data.review_count?("확인 필요 "+data.review_count+"건"):"모두 확정");
     renderTollEvidence();syncTollOcrTotal();
-    $("globalStatus").textContent=item.candidates.length
-      ?"통행료 금액 후보를 인식했습니다. 사용할 구간을 체크해 확인해주세요."
-      :"증빙은 첨부했습니다. 금액 자동인식에 실패했으므로 통행료를 직접 입력해주세요.";
+    $("globalStatus").textContent=(data.recognized_count||0)
+      ?"통행료를 자동 입력했습니다. 통행료 금액과 '확인 필요' 표시만 확인해주세요."
+      :"증빙은 첨부했습니다. 금액 자동판정에 실패했으므로 통행료를 직접 입력해주세요.";
   }catch(e){
     item.status="OCR 실패 · 증빙만 첨부";
     renderTollEvidence();
@@ -436,7 +459,7 @@ async function addTollEvidenceFile(file){
 }
 function clearTollEvidence(){
   tollEvidenceItems=[];tollOcrManaged=false;$("toll_fee").value="0";
-  renderTollEvidence();$("tollOcrSum").textContent="선택 합계 0원";
+  renderTollEvidence();$("tollOcrSum").textContent="자동합계 0원";
 }
 function tollEvidenceDataUrls(){
   return tollEvidenceItems.map(item=>item.dataUrl).filter(Boolean).slice(0,MAX_TOLL_EVIDENCE);
