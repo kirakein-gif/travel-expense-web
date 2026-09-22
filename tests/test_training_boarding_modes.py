@@ -12,6 +12,7 @@ BASE = dict(
     training_stay_mode="nonresidential",
     training_round_trips=3,
     training_meal_claim_count=0,
+    training_meal_claim_amount=0,
     origin_sigungu="천안시",
     destination_sigungu="아산시",
 )
@@ -33,10 +34,10 @@ def test_training_transport_is_one_round_trip_for_boarding_and_nonboarding():
         assert count == 1.0
 
 
-def test_training_boarding_middle_day_daily_allowance_and_meal_claim():
+def test_training_boarding_uses_institution_meal_claim_amount():
     result = calculate_allowances(
         training_boarding=True,
-        **{**BASE, "training_meal_claim_count": 42000},
+        **{**BASE, "training_meal_claim_amount": 42000},
     )
     assert result["daily_allowance"] == 50000
     assert result["meal_allowance"] == 42000
@@ -44,18 +45,18 @@ def test_training_boarding_middle_day_daily_allowance_and_meal_claim():
     assert "식비 청구액 42,000원" in result["meal_note"]
 
 
-def test_training_nonboarding_middle_day_half_and_meal_claim_deduction():
+def test_training_nonboarding_lunch_count_reduces_one_third_per_lunch():
     result = calculate_allowances(
         training_boarding=False,
-        **{**BASE, "training_meal_claim_count": 18000},
+        **{**BASE, "training_meal_claim_count": 2},
     )
     assert result["daily_allowance"] == 62500
-    assert result["meal_allowance"] == 57000
+    assert result["meal_allowance"] == 58333
     assert "중간 1일 50%" in result["daily_note"]
-    assert "중식비 청구액 18,000원" in result["meal_note"]
+    assert "중식 제공 2회 × 1/3" in result["meal_note"]
 
 
-def test_training_nonboarding_no_meal_claim_gets_full_meal_allowance():
+def test_training_nonboarding_no_lunch_gets_full_meal_allowance():
     result = calculate_allowances(training_boarding=False, **BASE)
     assert result["meal_allowance"] == 75000
-    assert "중식비 미청구" in result["meal_note"]
+    assert "중식 제공 없음" in result["meal_note"]

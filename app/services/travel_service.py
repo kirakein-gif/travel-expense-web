@@ -221,6 +221,7 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         training_stay_mode=effective_training_stay_mode,
         training_round_trips=req.training_round_trips,
         training_meal_claim_count=req.training_meal_claim_count,
+        training_meal_claim_amount=req.training_meal_claim_amount,
         origin_sigungu=req.origin_sigungu,
         destination_sigungu=req.sigungu,
     )
@@ -381,6 +382,7 @@ async def estimate_travel(req: TravelRequest) -> EstimateResponse:
             training_stay_mode=req.training_stay_mode,
             training_round_trips=req.training_round_trips,
             training_meal_claim_count=req.training_meal_claim_count,
+            training_meal_claim_amount=req.training_meal_claim_amount,
             toll_fee=req.toll_fee,
             parking_fee=req.parking_fee,
             lodging_fee=req.lodging_fee,

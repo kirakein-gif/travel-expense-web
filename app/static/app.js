@@ -223,8 +223,20 @@ function populateSelect(id,zeroLabel,unit){
   }
   select.value=String(Math.min(current,max));
 }
+function populateTrainingLunchCounts(){
+  const select=$("training_meal_claim_count"), current=Number(select.value||0), max=days();
+  select.innerHTML="";
+  for(let i=0;i<=max;i++){
+    const opt=document.createElement("option");
+    opt.value=String(i);
+    opt.textContent=i===0?"0회 · 제공 없음":i+"회";
+    select.appendChild(opt);
+  }
+  select.value=String(Math.min(current,max));
+}
 function populateMealCounts(){
   populateSelect("provided_meals_count","0식 · 제공 없음","식");
+  populateTrainingLunchCounts();
 }
 function updateTripType(){
   const training=isTrainingTrip();
@@ -240,10 +252,9 @@ function updateTraining(){
   $("trainingTripHint").textContent=boarding
     ? d+"일 교육 · 합숙 · 왕복 1회"
     : d+"일 교육 · 비합숙 · 왕복 1회";
-  $("trainingMealClaimLabel").textContent=boarding?"교육기관 식비 청구액":"교육기관 중식비 청구액";
-  $("trainingMealClaimHelp").textContent=boarding
-    ?"합숙: 교육훈련기관이 청구한 식비 금액을 그대로 입력"
-    :"비합숙: 교육훈련기관 중식비 청구액을 입력 · 미청구 시 0원";
+  $("trainingBoardingMealWrap").classList.toggle("hidden",!boarding);
+  $("trainingNonboardingMealWrap").classList.toggle("hidden",boarding);
+  populateTrainingLunchCounts();
   updatePreview();
 }
 function updatePreview(){
@@ -283,7 +294,7 @@ function basePayload(){
     trip_type:isTrainingTrip()?"training":"normal",training_boarding:isTrainingBoarding(),no_vehicle:$("no_vehicle").checked,public_vehicle:$("public_vehicle").checked,provided_meals_count:Number($("provided_meals_count").value||0),
     normal_stay_mode:$("normal_stay_mode").value,
     training_stay_mode:"residential",training_round_trips:null,
-    training_meal_claim_count:Number($("training_meal_claim_count").value||0),toll_fee:($("public_vehicle").checked||$("no_vehicle").checked)?0:Number($("toll_fee").value||0),parking_fee:($("public_vehicle").checked||$("no_vehicle").checked)?0:Number($("parking_fee").value||0),lodging_fee:$("lodging_fee").disabled?0:Number($("lodging_fee").value||0),
+    training_meal_claim_count:Number($("training_meal_claim_count").value||0),training_meal_claim_amount:Number($("training_meal_claim_amount").value||0),toll_fee:($("public_vehicle").checked||$("no_vehicle").checked)?0:Number($("toll_fee").value||0),parking_fee:($("public_vehicle").checked||$("no_vehicle").checked)?0:Number($("parking_fee").value||0),lodging_fee:$("lodging_fee").disabled?0:Number($("lodging_fee").value||0),
     affiliation:$("affiliation").value||null,position:$("position").value||null,traveler_name:$("traveler_name").value||null,passengers:$("passengers").value.trim()||null
   };
 }
@@ -380,6 +391,7 @@ dz.addEventListener("drop",e=>uploadTravelPdf(e.dataTransfer.files[0]));
 [$("vehicle_type"),$("phev_energy_source")].forEach(el=>el.addEventListener("change",()=>{$("manual_energy_price").value="";invalidateEvidenceCache();clearPriceReview();updateVehicle();}));
 $("trip_type").addEventListener("change",()=>{
   $("training_meal_claim_count").value="0";
+  $("training_meal_claim_amount").value="0";
   clearPriceReview();updateTripType();
 });
 $("round_trip").addEventListener("change",()=>{clearPriceReview();updateTripType();});
@@ -387,7 +399,7 @@ $("round_trip").addEventListener("change",()=>{clearPriceReview();updateTripType
 $("normal_stay_mode").addEventListener("change",()=>{updateCostInputs();clearPriceReview();});
 $("no_vehicle").addEventListener("change",()=>{$("manual_energy_price").value="";invalidateEvidenceCache();updateCostInputs();clearPriceReview();updateVehicle();});
 $("public_vehicle").addEventListener("change",()=>{updateCostInputs();clearPriceReview();updateManualPriceVisibility();});
-["training_meal_claim_count","provided_meals_count","toll_fee","parking_fee","lodging_fee","manual_energy_price"].forEach(id=>$(id).addEventListener("change",()=>{clearPriceReview();updateManualPriceVisibility();}));
+["training_meal_claim_count","training_meal_claim_amount","provided_meals_count","toll_fee","parking_fee","lodging_fee","manual_energy_price"].forEach(id=>$(id).addEventListener("change",()=>{clearPriceReview();updateManualPriceVisibility();}));
 ["origin","destination"].forEach(id=>$(id).addEventListener("input",clearDistanceReview));
 
 const today=seoulToday(); $("travel_date").value=today; $("end_date").value=today;

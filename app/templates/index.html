@@ -174,11 +174,18 @@
               <div id="trainingOptions" class="hidden">
                 <div class="section-label section-label-inline"><span>교육훈련</span><span id="trainingTripHint" class="section-inline-note"></span></div>
                 <div class="inline-note">근무지외 교육훈련 운임은 합숙·비합숙 모두 교육기간 전체 왕복 1회 기준으로 계산합니다.</div>
-                <div class="form-row form-row-help">
-                  <label id="trainingMealClaimLabel" for="training_meal_claim_count">교육기관 식비 청구액</label>
+                <div id="trainingBoardingMealWrap" class="form-row form-row-help hidden">
+                  <label for="training_meal_claim_amount">교육기관 식비 청구액</label>
                   <div>
-                    <input id="training_meal_claim_count" type="number" min="0" step="1" value="0">
-                    <span id="trainingMealClaimHelp" class="help compact-help">교육훈련기관 청구 금액을 입력합니다.</span>
+                    <input id="training_meal_claim_amount" type="number" min="0" step="1" value="0">
+                    <span class="help compact-help">합숙: 교육훈련기관이 청구한 식비 금액을 입력</span>
+                  </div>
+                </div>
+                <div id="trainingNonboardingMealWrap" class="form-row form-row-help hidden">
+                  <label for="training_meal_claim_count">중식 제공 횟수</label>
+                  <div>
+                    <select id="training_meal_claim_count"></select>
+                    <span class="help compact-help">비합숙: 중식 1회 제공 시 해당 일 식비의 1/3 감액</span>
                   </div>
                 </div>
               </div>
