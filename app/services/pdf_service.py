@@ -47,6 +47,8 @@ def _evidence_reason(result: EstimateResponse, evidence_error: str | None) -> st
         return f"전기차 공공 충전 기준단가 자동 적용 · {result.price_source or '-'}"
     if result.evidence_status == "manual_hydrogen_price":
         return "수소 충전단가 사용자 직접입력 · 별도 오피넷 증빙 대상 아님"
+    if result.evidence_status == "no_vehicle":
+        return "차량 없음 · 유가조회 및 단가 증빙 불필요"
     return "해당 차량은 현재 오피넷 화면 증빙 대상이 아닙니다."
 
 
@@ -60,12 +62,7 @@ def _period(req: TravelRequest) -> str:
 def _trip_type(req: TravelRequest) -> str:
     if req.trip_type != "training":
         return "일반출장"
-    stay = {
-        "nonresidential": "비숙박",
-        "residential": "숙박",
-        "custom": "혼합",
-    }.get(req.training_stay_mode, req.training_stay_mode)
-    return f"교육훈련({stay})"
+    return "교육훈련(합숙)" if req.training_boarding else "교육훈련(비합숙)"
 
 
 def _place(name: str | None, address: str | None, fallback: str) -> str:
@@ -380,17 +377,23 @@ def _regulation_movement_rows(
 
     if req.trip_type != "training":
         if req.round_trip:
-            current = start
-            while current <= end:
-                day = current.isoformat()
-                add(day, origin_name, destination_name)
-                add(day, destination_name, origin_name)
-                current += timedelta(days=1)
+            if end > start and req.normal_stay_mode == "residential":
+                add(start.isoformat(), origin_name, destination_name)
+                add(end.isoformat(), destination_name, origin_name)
+            else:
+                current = start
+                while current <= end:
+                    day = current.isoformat()
+                    add(day, origin_name, destination_name)
+                    add(day, destination_name, origin_name)
+                    current += timedelta(days=1)
         else:
             add(start.isoformat(), origin_name, destination_name)
         return rows
 
-    if req.training_stay_mode == "nonresidential":
+    training_stay_mode = "residential" if req.training_boarding else req.training_stay_mode
+
+    if training_stay_mode == "nonresidential":
         current = start
         while current <= end:
             day = current.isoformat()
@@ -399,7 +402,7 @@ def _regulation_movement_rows(
             current += timedelta(days=1)
         return rows
 
-    if req.training_stay_mode == "residential":
+    if training_stay_mode == "residential":
         add(start.isoformat(), origin_name, destination_name)
         add(end.isoformat(), destination_name, origin_name)
         return rows
@@ -534,7 +537,7 @@ async def generate_regulation_pdf(
             '<span class="compact-source">별도 오피넷 화면 증빙 대상 아님</span>'
             '</div>'
         )
-    elif result.evidence_status == "not_required":
+    elif result.evidence_status in {"not_required", "no_vehicle"}:
         evidence_detail_html = (
             '<div class="compact-evidence">'
             '<b>별도 단가 증빙 불필요</b><br>'

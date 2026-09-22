@@ -129,6 +129,7 @@ def calculate_allowances(
     trip_type: str,
     public_vehicle: bool,
     provided_meals_count: int,
+    training_boarding: bool,
     training_stay_mode: str,
     training_round_trips: int | None,
     training_meal_claim_count: int,
@@ -146,19 +147,13 @@ def calculate_allowances(
             custom_round_trips=training_round_trips,
         )
 
+        middle_days = max(days - 2, 0)
         if days == 1:
             daily = DAILY_ALLOWANCE_RATE
-            middle_nonresidential = 0
         else:
-            middle_days = max(days - 2, 0)
-            if training_stay_mode == "nonresidential":
-                middle_nonresidential = middle_days
-            elif training_stay_mode == "residential":
-                middle_nonresidential = 0
-            else:
-                middle_nonresidential = min(max(round_trips - 1, 0), middle_days)
+            middle_half_days = 0 if training_boarding else middle_days
             daily = DAILY_ALLOWANCE_RATE * Decimal("2")
-            daily += DAILY_ALLOWANCE_RATE * Decimal("0.5") * Decimal(middle_nonresidential)
+            daily += DAILY_ALLOWANCE_RATE * Decimal("0.5") * Decimal(middle_half_days)
 
         if public_vehicle:
             daily *= Decimal("0.5")
@@ -170,14 +165,13 @@ def calculate_allowances(
             else f"25,000원 × {days}일 · 교육훈련기관 식비 청구 없음"
         )
 
-        stay_label = {
-            "nonresidential": "전일 비숙박",
-            "residential": "전일 숙박",
-            "custom": "혼합",
-        }[training_stay_mode]
-        daily_note = f"{stay_label} · 등록/수료일 전액"
+        boarding_label = "합숙" if training_boarding else "비합숙"
+        daily_note = f"{boarding_label} · 등록/수료일 전액"
         if days > 2:
-            daily_note += f" · 중간 비숙박 {middle_nonresidential}일 50%"
+            if training_boarding:
+                daily_note += f" · 중간 {middle_days}일 일비 없음"
+            else:
+                daily_note += f" · 중간 {middle_days}일 50%"
         if public_vehicle:
             daily_note += " · 공용차량 50% 감액"
 

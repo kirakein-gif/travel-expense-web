@@ -24,6 +24,7 @@ class TravelRequest(BaseModel):
     round_trip: bool = True
 
     trip_type: TripType = "normal"
+    training_boarding: bool = False
     no_vehicle: bool = False
     public_vehicle: bool = False
     provided_meals_count: int = Field(default=0, ge=0)
@@ -82,6 +83,7 @@ class PriceRequest(BaseModel):
     origin_sigungu: str = ""
 
     trip_type: TripType = "normal"
+    training_boarding: bool = False
     no_vehicle: bool = False
     public_vehicle: bool = False
     provided_meals_count: int = Field(default=0, ge=0)

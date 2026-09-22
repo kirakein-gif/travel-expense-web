@@ -191,6 +191,12 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
     if one_way_km is None:
         one_way_km = req.distance_km / (2 if req.round_trip else 1)
 
+    effective_training_stay_mode = (
+        "residential"
+        if req.trip_type == "training" and req.training_boarding
+        else req.training_stay_mode
+    )
+
     transport_km, round_trips = transport_distance(
         one_way_km=one_way_km,
         start_date=req.travel_date,
@@ -198,7 +204,7 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         trip_type=req.trip_type,
         round_trip=req.round_trip,
         normal_stay_mode=req.normal_stay_mode,
-        training_stay_mode=req.training_stay_mode,
+        training_stay_mode=effective_training_stay_mode,
         training_round_trips=req.training_round_trips,
     )
 
@@ -213,7 +219,8 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         trip_type=req.trip_type,
         public_vehicle=effective_public_vehicle,
         provided_meals_count=req.provided_meals_count,
-        training_stay_mode=req.training_stay_mode,
+        training_boarding=req.training_boarding,
+        training_stay_mode=effective_training_stay_mode,
         training_round_trips=req.training_round_trips,
         training_meal_claim_count=req.training_meal_claim_count,
         origin_sigungu=req.origin_sigungu,
@@ -223,8 +230,15 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
     vehicle_cost_disabled = req.no_vehicle or effective_public_vehicle
     effective_toll_fee = 0 if vehicle_cost_disabled else req.toll_fee
     effective_parking_fee = 0 if vehicle_cost_disabled else req.parking_fee
-    stay_mode = req.training_stay_mode if req.trip_type == "training" else req.normal_stay_mode
-    lodging_allowed = allowances["trip_days"] > 1 and stay_mode != "nonresidential"
+    stay_mode = effective_training_stay_mode if req.trip_type == "training" else req.normal_stay_mode
+    lodging_allowed = allowances["trip_days"] > 1 and (
+        (req.trip_type == "normal" and stay_mode != "nonresidential")
+        or (
+            req.trip_type == "training"
+            and not req.training_boarding
+            and stay_mode != "nonresidential"
+        )
+    )
     effective_lodging_fee = req.lodging_fee if lodging_allowed else 0
 
     amount = None
@@ -303,7 +317,7 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
                 total_cost=amount,
                 round_trip_count=round_trips,
                 trip_type=req.trip_type,
-                training_stay_mode=req.training_stay_mode,
+                training_stay_mode=effective_training_stay_mode,
                 days=trip_days(req.travel_date, req.end_date),
             )
 
@@ -365,6 +379,7 @@ async def estimate_travel(req: TravelRequest) -> EstimateResponse:
             sigungu=distance.sigungu,
             origin_sigungu=distance.origin_sigungu,
             trip_type=req.trip_type,
+            training_boarding=req.training_boarding,
             no_vehicle=req.no_vehicle,
             public_vehicle=req.public_vehicle,
             provided_meals_count=req.provided_meals_count,

@@ -29,6 +29,13 @@ function seoulToday(){
   return map.year+"-"+map.month+"-"+map.day;
 }
 function normSigungu(value){ return (value||"").trim().split(/\s+/)[0]; }
+function isTrainingTrip(){ return $("trip_type").value!=="normal"; }
+function isTrainingBoarding(){ return $("trip_type").value==="training_boarding"; }
+function tripTypeLabel(){
+  if($("trip_type").value==="training_boarding") return "교육훈련 합숙";
+  if($("trip_type").value==="training_nonboarding") return "교육훈련 비합숙";
+  return "일반출장";
+}
 function days(){
   const s=new Date($("travel_date").value), e=new Date($("end_date").value);
   if(!$("travel_date").value||!$("end_date").value) return 1;
@@ -227,7 +234,7 @@ function populateMealCounts(){
   populateSelect("training_meal_claim_count","0회 · 청구 없음","회");
 }
 function updateTripType(){
-  const training=$("trip_type").value==="training";
+  const training=isTrainingTrip();
   $("normalOptions").classList.toggle("hidden",training);
   $("trainingOptions").classList.toggle("hidden",!training);
   $("normalStayWrap").classList.toggle("hidden",training||days()===1);
@@ -235,16 +242,20 @@ function updateTripType(){
   updateTraining(); updateCostInputs(); updateManualPriceVisibility(); updatePreview();
 }
 function updateTraining(){
-  const mode=$("training_stay_mode").value, d=days(), r=suggestedTrainingTrips();
-  $("customRoundTripsWrap").classList.toggle("hidden",mode!=="custom");
-  if(mode==="nonresidential") $("trainingTripHint").textContent=d+"일 교육 → 매일 출퇴근 → 왕복 "+r+"회";
-  else if(mode==="residential") $("trainingTripHint").textContent=d+"일 교육 → 첫날 출발·마지막날 귀가 → 왕복 1회";
-  else $("trainingTripHint").textContent=d+"일 교육 → 혼합형 → 왕복 "+r+"회";
+  const d=days(), boarding=isTrainingBoarding();
+  if(boarding)$("training_stay_mode").value="residential";
+  const mode=$("training_stay_mode").value, r=suggestedTrainingTrips();
+  $("trainingStayWrap").classList.toggle("hidden",boarding);
+  $("customRoundTripsWrap").classList.toggle("hidden",boarding||mode!=="custom");
+  if(boarding) $("trainingTripHint").textContent=d+"일 교육 · 합숙 → 기관 숙박 제공 · 왕복 1회";
+  else if(mode==="nonresidential") $("trainingTripHint").textContent=d+"일 교육 · 비합숙 → 매일 왕복 "+r+"회";
+  else if(mode==="residential") $("trainingTripHint").textContent=d+"일 교육 · 비합숙 → 개별 숙박 · 왕복 1회";
+  else $("trainingTripHint").textContent=d+"일 교육 · 비합숙 → 혼합 이동 · 왕복 "+r+"회";
   $("training_round_trips").max=d; updatePreview();
 }
 function updatePreview(){
   $("preview_days").textContent=days()+"일";
-  $("preview_type").textContent=$("trip_type").value==="training"?"교육훈련":"일반출장";
+  $("preview_type").textContent=tripTypeLabel();
 }
 function updateCostInputs(){
   const noVehicle=$("no_vehicle").checked;
@@ -263,9 +274,12 @@ function updateCostInputs(){
   setForcedDisabled("parking_fee",vehicleCostDisabled);
 
   const sameDay=days()===1;
-  const training=$("trip_type").value==="training";
+  const training=isTrainingTrip();
+  const boarding=isTrainingBoarding();
   const stayMode=training?$("training_stay_mode").value:$("normal_stay_mode").value;
-  const lodgingAllowed=!sameDay&&stayMode!=="nonresidential";
+  const lodgingAllowed=!sameDay && (
+    training ? (!boarding&&stayMode!=="nonresidential") : stayMode!=="nonresidential"
+  );
   if(!lodgingAllowed)$("lodging_fee").value="0";
   setForcedDisabled("lodging_fee",!lodgingAllowed);
 }
@@ -275,9 +289,9 @@ function basePayload(){
     travel_date:$("travel_date").value,end_date:$("end_date").value,origin:$("origin").value,destination:$("destination").value,
     purpose:$("purpose").value||null,vehicle_type:type,phev_energy_source:type==="phev"?$("phev_energy_source").value:null,
     efficiency:spec.efficiency,manual_energy_price:manual>0?manual:null,round_trip:$("round_trip").checked,
-    trip_type:$("trip_type").value,no_vehicle:$("no_vehicle").checked,public_vehicle:$("public_vehicle").checked,provided_meals_count:Number($("provided_meals_count").value||0),
+    trip_type:isTrainingTrip()?"training":"normal",training_boarding:isTrainingBoarding(),no_vehicle:$("no_vehicle").checked,public_vehicle:$("public_vehicle").checked,provided_meals_count:Number($("provided_meals_count").value||0),
     normal_stay_mode:$("normal_stay_mode").value,
-    training_stay_mode:$("training_stay_mode").value,training_round_trips:$("trip_type").value==="training"&&$("training_stay_mode").value==="custom"?Number($("training_round_trips").value||1):null,
+    training_stay_mode:isTrainingBoarding()?"residential":$("training_stay_mode").value,training_round_trips:isTrainingTrip()&&!isTrainingBoarding()&&$("training_stay_mode").value==="custom"?Number($("training_round_trips").value||1):null,
     training_meal_claim_count:Number($("training_meal_claim_count").value||0),toll_fee:($("public_vehicle").checked||$("no_vehicle").checked)?0:Number($("toll_fee").value||0),parking_fee:($("public_vehicle").checked||$("no_vehicle").checked)?0:Number($("parking_fee").value||0),lodging_fee:$("lodging_fee").disabled?0:Number($("lodging_fee").value||0),
     affiliation:$("affiliation").value||null,position:$("position").value||null,traveler_name:$("traveler_name").value||null,passengers:$("passengers").value.trim()||null
   };
@@ -373,7 +387,12 @@ const dz=$("dropZone");
 dz.addEventListener("drop",e=>uploadTravelPdf(e.dataTransfer.files[0]));
 
 [$("vehicle_type"),$("phev_energy_source")].forEach(el=>el.addEventListener("change",()=>{$("manual_energy_price").value="";invalidateEvidenceCache();clearPriceReview();updateVehicle();}));
-[$("trip_type"),$("round_trip")].forEach(el=>el.addEventListener("change",()=>{clearPriceReview();updateTripType();}));
+$("trip_type").addEventListener("change",()=>{
+  if($("trip_type").value==="training_boarding")$("training_stay_mode").value="residential";
+  else if($("trip_type").value==="training_nonboarding")$("training_stay_mode").value="nonresidential";
+  clearPriceReview();updateTripType();
+});
+$("round_trip").addEventListener("change",()=>{clearPriceReview();updateTripType();});
 [$("travel_date"),$("end_date")].forEach(el=>el.addEventListener("change",()=>{invalidateEvidenceCache();clearPriceReview();populateMealCounts();updateCostInputs();updateTripType();updateManualPriceVisibility();}));
 [$("training_stay_mode"),$("training_round_trips")].forEach(el=>el.addEventListener("change",()=>{updateCostInputs();clearPriceReview();updateTraining();updateManualPriceVisibility();}));
 $("normal_stay_mode").addEventListener("change",()=>{updateCostInputs();clearPriceReview();});
@@ -442,7 +461,7 @@ $("calculateButton").addEventListener("click",async()=>{
     $("summary_daily").textContent=fmt(data.daily_allowance)+" 원";
     $("summary_meal").textContent=fmt(data.meal_allowance)+" 원";
     $("summary_misc").textContent=fmt(Number(data.toll_fee||0)+Number(data.parking_fee||0)+Number(data.lodging_fee||0))+" 원";
-    $("fare_summary").textContent=days()+"일 · "+($("trip_type").value==="training"?"교육훈련":"일반출장")+" · 자동차운임 "+(data.estimated_transport_cost==null?"-":fmt(data.estimated_transport_cost)+"원")+" · 일비 "+fmt(data.daily_allowance)+"원 · 식비 "+fmt(data.meal_allowance)+"원";
+    $("fare_summary").textContent=days()+"일 · "+tripTypeLabel()+" · 자동차운임 "+(data.estimated_transport_cost==null?"-":fmt(data.estimated_transport_cost)+"원")+" · 일비 "+fmt(data.daily_allowance)+"원 · 식비 "+fmt(data.meal_allowance)+"원";
     $("source").textContent=(data.price_source||"-")+(data.price_cache_hit?" · 캐시":"");
     const spec=currentVehicleSpec(),canEvidence=spec.evidence&&data.energy_price!=null&&!payload.public_vehicle&&data.evidence_status!=="manual_price";
     if(canEvidence){

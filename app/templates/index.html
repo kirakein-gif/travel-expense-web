@@ -101,7 +101,8 @@
                 <label for="trip_type">출장 유형</label>
                 <select id="trip_type">
                   <option value="normal">일반출장</option>
-                  <option value="training">교육훈련</option>
+                  <option value="training_boarding">교육훈련 합숙</option>
+                  <option value="training_nonboarding">교육훈련 비합숙</option>
                 </select>
               </div>
 
@@ -172,13 +173,16 @@
 
               <div id="trainingOptions" class="hidden">
                 <div class="section-label section-label-inline"><span>교육훈련</span><span id="trainingTripHint" class="section-inline-note"></span></div>
-                <div class="form-row">
-                  <label for="training_stay_mode">숙박 방식</label>
-                  <select id="training_stay_mode">
-                    <option value="nonresidential">전일 비숙박 · 매일 왕복</option>
-                    <option value="residential">전일 숙박 · 첫날 출발/마지막날 귀가</option>
-                    <option value="custom">혼합 · 왕복 횟수 직접 지정</option>
-                  </select>
+                <div id="trainingStayWrap" class="form-row form-row-help">
+                  <label for="training_stay_mode">이동·숙박 방식</label>
+                  <div>
+                    <select id="training_stay_mode">
+                      <option value="nonresidential">매일 왕복</option>
+                      <option value="residential">개별 숙박 · 왕복 1회</option>
+                      <option value="custom">혼합 · 왕복 횟수 직접 지정</option>
+                    </select>
+                    <span class="help compact-help">비합숙 교육은 매일 왕복하거나 개인이 별도 숙박을 선택할 수 있습니다.</span>
+                  </div>
                 </div>
                 <div id="customRoundTripsWrap" class="form-row form-row-help hidden">
                   <label for="training_round_trips">왕복 횟수</label>
