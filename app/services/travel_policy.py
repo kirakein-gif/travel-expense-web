@@ -94,13 +94,9 @@ def transport_distance(
     training_round_trips: int | None,
 ) -> tuple[float, float]:
     if trip_type == "training":
-        count = training_round_trip_count(
-            start_date=start_date,
-            end_date=end_date,
-            stay_mode=training_stay_mode,
-            custom_round_trips=training_round_trips,
-        )
-        return round(one_way_km * 2 * count, 1), float(count)
+        # 2026 교육훈련여비 지급기준: 근무지외 교육훈련 운임은
+        # 합숙·비합숙 모두 여행구간 등급별 왕복운임 정액(왕복 1회).
+        return round(one_way_km * 2, 1), 1.0
 
     days = trip_days(start_date, end_date)
     if not round_trip:
@@ -140,12 +136,7 @@ def calculate_allowances(
     in_work_area = same_work_area(origin_sigungu, destination_sigungu)
 
     if trip_type == "training":
-        round_trips = training_round_trip_count(
-            start_date=start_date,
-            end_date=end_date,
-            stay_mode=training_stay_mode,
-            custom_round_trips=training_round_trips,
-        )
+        round_trips = 1
 
         middle_days = max(days - 2, 0)
         if days == 1:
@@ -158,12 +149,22 @@ def calculate_allowances(
         if public_vehicle:
             daily *= Decimal("0.5")
 
-        meal_allowance, meal_count = _meal_allowance_by_count(days, training_meal_claim_count)
-        meal_note = (
-            f"25,000원 × {days}일 - 교육훈련기관 식비 청구 {meal_count}식 × 1/3"
-            if meal_count
-            else f"25,000원 × {days}일 · 교육훈련기관 식비 청구 없음"
-        )
+        meal_claim_amount = max(int(training_meal_claim_count or 0), 0)
+        if training_boarding:
+            meal_allowance = meal_claim_amount
+            meal_note = (
+                f"합숙 · 교육훈련기관 식비 청구액 {meal_claim_amount:,}원"
+                if meal_claim_amount
+                else "합숙 · 교육훈련기관 식비 청구액 없음"
+            )
+        else:
+            meal_base = _won(MEAL_ALLOWANCE_RATE * Decimal(days))
+            meal_allowance = max(meal_base - meal_claim_amount, 0)
+            meal_note = (
+                f"비합숙 · 25,000원 × {days}일 - 교육훈련기관 증식비 청구액 {meal_claim_amount:,}원"
+                if meal_claim_amount
+                else f"비합숙 · 25,000원 × {days}일 · 증식비 미청구"
+            )
 
         boarding_label = "합숙" if training_boarding else "비합숙"
         daily_note = f"{boarding_label} · 등록/수료일 전액"

@@ -192,9 +192,7 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
         one_way_km = req.distance_km / (2 if req.round_trip else 1)
 
     effective_training_stay_mode = (
-        "residential"
-        if req.trip_type == "training" and req.training_boarding
-        else req.training_stay_mode
+        "residential" if req.trip_type == "training" else req.training_stay_mode
     )
 
     transport_km, round_trips = transport_distance(
@@ -233,11 +231,7 @@ async def resolve_price(req: PriceRequest) -> PriceResponse:
     stay_mode = effective_training_stay_mode if req.trip_type == "training" else req.normal_stay_mode
     lodging_allowed = allowances["trip_days"] > 1 and (
         (req.trip_type == "normal" and stay_mode != "nonresidential")
-        or (
-            req.trip_type == "training"
-            and not req.training_boarding
-            and stay_mode != "nonresidential"
-        )
+        or req.trip_type == "training"
     )
     effective_lodging_fee = req.lodging_fee if lodging_allowed else 0
 

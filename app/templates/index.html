@@ -173,29 +173,12 @@
 
               <div id="trainingOptions" class="hidden">
                 <div class="section-label section-label-inline"><span>교육훈련</span><span id="trainingTripHint" class="section-inline-note"></span></div>
-                <div id="trainingStayWrap" class="form-row form-row-help">
-                  <label for="training_stay_mode">이동·숙박 방식</label>
-                  <div>
-                    <select id="training_stay_mode">
-                      <option value="nonresidential">매일 왕복</option>
-                      <option value="residential">개별 숙박 · 왕복 1회</option>
-                      <option value="custom">혼합 · 왕복 횟수 직접 지정</option>
-                    </select>
-                    <span class="help compact-help">비합숙 교육은 매일 왕복하거나 개인이 별도 숙박을 선택할 수 있습니다.</span>
-                  </div>
-                </div>
-                <div id="customRoundTripsWrap" class="form-row form-row-help hidden">
-                  <label for="training_round_trips">왕복 횟수</label>
-                  <div>
-                    <input id="training_round_trips" type="number" min="1" step="1" value="1">
-                    <span class="help compact-help">예: 3일 교육 중 총 2회 왕복이면 2 입력</span>
-                  </div>
-                </div>
+                <div class="inline-note">근무지외 교육훈련 운임은 합숙·비합숙 모두 교육기간 전체 왕복 1회 기준으로 계산합니다.</div>
                 <div class="form-row form-row-help">
-                  <label for="training_meal_claim_count">식비 청구 횟수</label>
+                  <label id="trainingMealClaimLabel" for="training_meal_claim_count">교육기관 식비 청구액</label>
                   <div>
-                    <select id="training_meal_claim_count"></select>
-                    <span class="help compact-help">청구 1식당 식비 1/3 감액</span>
+                    <input id="training_meal_claim_count" type="number" min="0" step="1" value="0">
+                    <span id="trainingMealClaimHelp" class="help compact-help">교육훈련기관 청구 금액을 입력합니다.</span>
                   </div>
                 </div>
               </div>

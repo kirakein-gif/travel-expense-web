@@ -391,40 +391,10 @@ def _regulation_movement_rows(
             add(start.isoformat(), origin_name, destination_name)
         return rows
 
-    training_stay_mode = "residential" if req.training_boarding else req.training_stay_mode
-
-    if training_stay_mode == "nonresidential":
-        current = start
-        while current <= end:
-            day = current.isoformat()
-            add(day, origin_name, destination_name)
-            add(day, destination_name, origin_name)
-            current += timedelta(days=1)
-        return rows
-
-    if training_stay_mode == "residential":
-        add(start.isoformat(), origin_name, destination_name)
-        add(end.isoformat(), destination_name, origin_name)
-        return rows
-
-    # Mixed training currently stores a round-trip count but not exact stay dates.
-    # Preserve known first/last dates and label intermediate legs as "기간 중"
-    # rather than inventing dates.
-    round_trips = max(1, int(result.round_trip_count or req.training_round_trips or 1))
-    total_legs = round_trips * 2
-    for index in range(total_legs):
-        is_outbound = index % 2 == 0
-        if index == 0:
-            day_label = start.isoformat()
-        elif index == total_legs - 1:
-            day_label = end.isoformat()
-        else:
-            day_label = "기간 중"
-        add(
-            day_label,
-            origin_name if is_outbound else destination_name,
-            destination_name if is_outbound else origin_name,
-        )
+    # 2026 교육훈련여비 지급기준상 근무지외 교육훈련 운임은
+    # 합숙·비합숙 모두 교육기간 전체 왕복 1회로 표시합니다.
+    add(start.isoformat(), origin_name, destination_name)
+    add(end.isoformat(), destination_name, origin_name)
     return rows
 
 
