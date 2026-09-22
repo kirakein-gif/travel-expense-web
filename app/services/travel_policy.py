@@ -129,7 +129,6 @@ def calculate_allowances(
     training_stay_mode: str,
     training_round_trips: int | None,
     training_meal_claim_count: int,
-    training_meal_claim_amount: int,
     origin_sigungu: str,
     destination_sigungu: str,
 ) -> dict:
@@ -150,25 +149,15 @@ def calculate_allowances(
         if public_vehicle:
             daily *= Decimal("0.5")
 
-        if training_boarding:
-            meal_claim_amount = max(int(training_meal_claim_amount or 0), 0)
-            meal_allowance = meal_claim_amount
-            meal_note = (
-                f"합숙 · 교육훈련기관 식비 청구액 {meal_claim_amount:,}원"
-                if meal_claim_amount
-                else "합숙 · 교육훈련기관 식비 청구액 없음"
-            )
-        else:
-            lunch_count = min(max(int(training_meal_claim_count or 0), 0), days)
-            meal = MEAL_ALLOWANCE_RATE * Decimal(days)
-            meal -= (MEAL_ALLOWANCE_RATE / Decimal("3")) * Decimal(lunch_count)
-            meal = max(Decimal("0"), meal)
-            meal_allowance = _won(meal)
-            meal_note = (
-                f"비합숙 · 25,000원 × {days}일 - 중식 제공 {lunch_count}회 × 1/3"
-                if lunch_count
-                else f"비합숙 · 25,000원 × {days}일 · 중식 제공 없음"
-            )
+        meal_allowance, provided_meals = _meal_allowance_by_count(
+            days, training_meal_claim_count
+        )
+        boarding_label = "합숙" if training_boarding else "비합숙"
+        meal_note = (
+            f"{boarding_label} · 25,000원 × {days}일 - 무료 제공식사 {provided_meals}식 × 1/3"
+            if provided_meals
+            else f"{boarding_label} · 25,000원 × {days}일 · 무료 제공식사 없음"
+        )
 
         boarding_label = "합숙" if training_boarding else "비합숙"
         daily_note = f"{boarding_label} · 등록/수료일 전액"

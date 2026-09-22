@@ -12,7 +12,6 @@ BASE = dict(
     training_stay_mode="nonresidential",
     training_round_trips=3,
     training_meal_claim_count=0,
-    training_meal_claim_amount=0,
     origin_sigungu="천안시",
     destination_sigungu="아산시",
 )
@@ -34,18 +33,18 @@ def test_training_transport_is_one_round_trip_for_boarding_and_nonboarding():
         assert count == 1.0
 
 
-def test_training_boarding_uses_institution_meal_claim_amount():
+def test_training_boarding_meal_deduction_uses_free_meal_count():
     result = calculate_allowances(
         training_boarding=True,
-        **{**BASE, "training_meal_claim_amount": 42000},
+        **{**BASE, "training_meal_claim_count": 2},
     )
     assert result["daily_allowance"] == 50000
-    assert result["meal_allowance"] == 42000
+    assert result["meal_allowance"] == 58333
     assert "중간 1일 일비 없음" in result["daily_note"]
-    assert "식비 청구액 42,000원" in result["meal_note"]
+    assert "무료 제공식사 2식 × 1/3" in result["meal_note"]
 
 
-def test_training_nonboarding_lunch_count_reduces_one_third_per_lunch():
+def test_training_nonboarding_meal_deduction_uses_free_meal_count():
     result = calculate_allowances(
         training_boarding=False,
         **{**BASE, "training_meal_claim_count": 2},
@@ -53,10 +52,11 @@ def test_training_nonboarding_lunch_count_reduces_one_third_per_lunch():
     assert result["daily_allowance"] == 62500
     assert result["meal_allowance"] == 58333
     assert "중간 1일 50%" in result["daily_note"]
-    assert "중식 제공 2회 × 1/3" in result["meal_note"]
+    assert "무료 제공식사 2식 × 1/3" in result["meal_note"]
 
 
-def test_training_nonboarding_no_lunch_gets_full_meal_allowance():
-    result = calculate_allowances(training_boarding=False, **BASE)
-    assert result["meal_allowance"] == 75000
-    assert "중식 제공 없음" in result["meal_note"]
+def test_training_personally_paid_meals_are_not_deducted_when_count_is_zero():
+    for boarding in (True, False):
+        result = calculate_allowances(training_boarding=boarding, **BASE)
+        assert result["meal_allowance"] == 75000
+        assert "무료 제공식사 없음" in result["meal_note"]

@@ -32,7 +32,6 @@ class TravelRequest(BaseModel):
     training_stay_mode: TrainingStayMode = "nonresidential"
     training_round_trips: Optional[int] = Field(default=None, ge=1)
     training_meal_claim_count: int = Field(default=0, ge=0)
-    training_meal_claim_amount: int = Field(default=0, ge=0)
 
     toll_fee: int = Field(default=0, ge=0)
     parking_fee: int = Field(default=0, ge=0)
@@ -92,7 +91,6 @@ class PriceRequest(BaseModel):
     training_stay_mode: TrainingStayMode = "nonresidential"
     training_round_trips: Optional[int] = Field(default=None, ge=1)
     training_meal_claim_count: int = Field(default=0, ge=0)
-    training_meal_claim_amount: int = Field(default=0, ge=0)
 
     toll_fee: int = Field(default=0, ge=0)
     parking_fee: int = Field(default=0, ge=0)
