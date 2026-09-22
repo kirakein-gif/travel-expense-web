@@ -185,14 +185,6 @@ async def generate_estimate_pdf(
   .basis {{ border: 1px solid #cbd5e1; padding: 3mm; line-height: 1.6; min-height: 27mm; font-size: 11.5px; }}
   .evidence-wrap {{ height: 218mm; border: 1px solid #cbd5e1; padding: 2mm; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; }}
   .evidence-img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
-  .evidence-page.with-toll .evidence-wrap {{ height: 110mm; }}
-  .evidence-title {{ font-size: 11.5px; font-weight: 800; margin: 2mm 0 1mm; color:#333; }}
-  .toll-evidence-section {{ margin-top: 2.5mm; }}
-  .toll-evidence-grid {{ height: 82mm; display:grid; grid-template-columns:1fr; gap:2mm; }}
-  .toll-evidence-grid.count-2 {{ grid-template-columns:1fr 1fr; }}
-  .toll-evidence-grid.count-3,.toll-evidence-grid.count-4 {{ grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; }}
-  .toll-evidence-item {{ min-width:0; min-height:0; border:1px solid #aaa; padding:1mm; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#fff; }}
-  .toll-evidence-img {{ max-width:100%; max-height:100%; object-fit:contain; }}
   .evidence-empty {{ text-align: center; color: #475569; line-height: 1.8; padding: 20mm; font-size: 12px; }}
   .evidence-page.with-toll .evidence-wrap {{ height: 112mm; }}
   .evidence-title {{ font-size: 11.5px; font-weight: 800; margin: 2mm 0 1mm; color:#334155; }}
@@ -735,6 +727,14 @@ async def generate_regulation_pdf(
     background: #fff;
   }}
   .evidence-img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
+  .evidence-page.with-toll .evidence-wrap {{ height: 110mm; }}
+  .evidence-title {{ font-size: 11.5px; font-weight: 800; margin: 2mm 0 1mm; color:#333; }}
+  .toll-evidence-section {{ margin-top: 2.5mm; }}
+  .toll-evidence-grid {{ height: 82mm; display:grid; grid-template-columns:1fr; gap:2mm; }}
+  .toll-evidence-grid.count-2 {{ grid-template-columns:1fr 1fr; }}
+  .toll-evidence-grid.count-3,.toll-evidence-grid.count-4 {{ grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; }}
+  .toll-evidence-item {{ min-width:0; min-height:0; border:1px solid #aaa; padding:1mm; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#fff; }}
+  .toll-evidence-img {{ max-width:100%; max-height:100%; object-fit:contain; }}
   .evidence-empty {{
     text-align: center;
     color: #555;
