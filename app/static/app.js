@@ -2,6 +2,8 @@ const $ = id => document.getElementById(id);
 const fmt = n => n == null ? "-" : Number(n).toLocaleString("ko-KR");
 let lastDistance = null, lastPayload = null, lastEvidencePayload = null, importData = null, selectedTrip = null;
 let prefetchedEvidence = null, evidencePrefetchPromise = null, evidencePrefetchContext = null, evidencePrefetchSeq = 0;
+let tollEvidenceItems = [], tollEvidenceSeq = 0, tollOcrManaged = false;
+const MAX_TOLL_EVIDENCE = 4;
 
 const VEHICLE_SPECS = {
   gasoline:{label:"휘발유",efficiency:11.97,unit:"km/L",evidence:"gasoline"},
@@ -274,6 +276,8 @@ function updateCostInputs(){
   }
   setForcedDisabled("toll_fee",vehicleCostDisabled);
   setForcedDisabled("parking_fee",vehicleCostDisabled);
+  $("tollImageFiles").disabled=vehicleCostDisabled;
+  $("tollEvidencePanel").classList.toggle("disabled",vehicleCostDisabled);
 
   const sameDay=days()===1;
   const training=isTrainingTrip();
@@ -322,6 +326,120 @@ function updateManualPriceVisibility(){
     $("manual_energy_price").placeholder="예: 1860.58";
     $("manualPriceHelp").textContent="당일 오피넷 평균가는 미제공 · 직접 입력";
   }
+}
+
+function fileToDataUrl(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(new Error("이미지를 읽지 못했습니다."));
+    reader.readAsDataURL(file);
+  });
+}
+function loadImage(src){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>resolve(img);
+    img.onerror=()=>reject(new Error("이미지 형식을 확인해주세요."));
+    img.src=src;
+  });
+}
+async function imageForPdf(file){
+  const src=await fileToDataUrl(file),img=await loadImage(src);
+  const maxSide=2200,scale=Math.min(1,maxSide/Math.max(img.width,img.height));
+  const canvas=document.createElement("canvas");
+  canvas.width=Math.max(1,Math.round(img.width*scale));
+  canvas.height=Math.max(1,Math.round(img.height*scale));
+  const ctx=canvas.getContext("2d");
+  ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  return canvas.toDataURL("image/jpeg",.9);
+}
+function syncTollOcrTotal(){
+  const all=tollEvidenceItems.flatMap(item=>item.candidates);
+  const sum=tollEvidenceItems.reduce((total,item)=>total+item.candidates.filter(c=>c.selected).reduce((s,c)=>s+Number(c.amount||0),0),0);
+  $("tollOcrSum").textContent="선택 합계 "+fmt(sum)+"원";
+  if(all.length){
+    tollOcrManaged=true;
+    $("toll_fee").value=String(sum);
+    clearPriceReview();
+  }else if(!tollEvidenceItems.length&&tollOcrManaged){
+    $("toll_fee").value="0";
+    tollOcrManaged=false;
+    clearPriceReview();
+  }
+}
+function renderTollEvidence(){
+  const list=$("tollEvidenceList");
+  list.innerHTML="";
+  tollEvidenceItems.forEach(item=>{
+    const card=document.createElement("div");card.className="toll-evidence-item";
+    const head=document.createElement("div");head.className="toll-evidence-item-head";
+    const img=document.createElement("img");img.className="toll-evidence-thumb";img.src=item.dataUrl;img.alt="통행료 증빙 캡처";
+    const meta=document.createElement("div");meta.className="toll-evidence-meta";
+    const title=document.createElement("strong");title.textContent=item.name||"하이패스 캡처";
+    const status=document.createElement("span");status.textContent=item.status;
+    meta.append(title,status);
+    const remove=document.createElement("button");remove.type="button";remove.className="toll-remove";remove.textContent="삭제";
+    remove.addEventListener("click",()=>{
+      tollEvidenceItems=tollEvidenceItems.filter(x=>x.id!==item.id);
+      renderTollEvidence();syncTollOcrTotal();clearPriceReview();
+    });
+    head.append(img,meta,remove);card.appendChild(head);
+    if(item.candidates.length){
+      const box=document.createElement("div");box.className="toll-candidates";
+      item.candidates.forEach(candidate=>{
+        const row=document.createElement("div");row.className="toll-candidate-row";
+        const check=document.createElement("input");check.type="checkbox";check.checked=candidate.selected;
+        check.addEventListener("change",()=>{candidate.selected=check.checked;tollOcrManaged=true;syncTollOcrTotal();});
+        const amount=document.createElement("input");amount.type="number";amount.min="0";amount.step="1";amount.value=String(candidate.amount);
+        amount.addEventListener("change",()=>{candidate.amount=Math.max(0,Number(amount.value||0));tollOcrManaged=true;syncTollOcrTotal();});
+        const line=document.createElement("span");line.className="toll-candidate-line";line.textContent=candidate.line||"OCR 금액 후보";
+        row.append(check,amount,line);box.appendChild(row);
+      });
+      card.appendChild(box);
+    }else if(item.status!=="OCR 분석 중..."){
+      const empty=document.createElement("div");empty.className="toll-ocr-empty";
+      empty.textContent="금액을 자동으로 찾지 못했습니다. 증빙은 유지되며 통행료는 위 입력칸에 직접 입력할 수 있습니다.";
+      card.appendChild(empty);
+    }
+    list.appendChild(card);
+  });
+}
+async function addTollEvidenceFile(file){
+  if($("tollImageFiles").disabled){$("globalStatus").textContent="현재 조건에서는 통행료를 입력할 수 없습니다.";return;}
+  if(!file||!file.type.startsWith("image/"))return;
+  if(tollEvidenceItems.length>=MAX_TOLL_EVIDENCE){$("globalStatus").textContent="통행료 증빙은 최대 4장까지 첨부할 수 있습니다.";return;}
+  if(file.size>8*1024*1024){$("globalStatus").textContent="통행료 증빙 이미지는 장당 8MB 이하만 사용할 수 있습니다.";return;}
+
+  const item={id:++tollEvidenceSeq,name:file.name||"클립보드 캡처",dataUrl:"",status:"OCR 분석 중...",candidates:[]};
+  try{item.dataUrl=await imageForPdf(file);}catch(e){$("globalStatus").textContent=e.message;return;}
+  tollEvidenceItems.push(item);renderTollEvidence();
+  $("globalStatus").textContent="통행료 증빙 OCR 분석 중...";
+  try{
+    const form=new FormData();form.append("file",file,file.name||"toll.png");
+    const response=await fetch("/api/toll-evidence-ocr",{method:"POST",body:form});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.detail||"통행료 OCR 실패");
+    item.candidates=(data.candidates||[]).map(c=>({amount:Number(c.amount||0),line:c.line||"",selected:Boolean(c.recommended)}));
+    item.status=item.candidates.length?"금액 후보 "+item.candidates.length+"건 인식":"OCR 완료 · 금액 후보 없음";
+    renderTollEvidence();syncTollOcrTotal();
+    $("globalStatus").textContent=item.candidates.length
+      ?"통행료 금액 후보를 인식했습니다. 사용할 구간을 체크해 확인해주세요."
+      :"증빙은 첨부했습니다. 금액 자동인식에 실패했으므로 통행료를 직접 입력해주세요.";
+  }catch(e){
+    item.status="OCR 실패 · 증빙만 첨부";
+    renderTollEvidence();
+    $("globalStatus").textContent="통행료 증빙은 첨부했습니다. OCR 실패 · "+e.message;
+  }
+  clearPriceReview();
+}
+function clearTollEvidence(){
+  tollEvidenceItems=[];tollOcrManaged=false;$("toll_fee").value="0";
+  renderTollEvidence();$("tollOcrSum").textContent="선택 합계 0원";
+}
+function tollEvidenceDataUrls(){
+  return tollEvidenceItems.map(item=>item.dataUrl).filter(Boolean).slice(0,MAX_TOLL_EVIDENCE);
 }
 
 function selectedParticipant(){
@@ -394,9 +512,27 @@ $("trip_type").addEventListener("change",()=>{
 $("round_trip").addEventListener("change",()=>{clearPriceReview();updateTripType();});
 [$("travel_date"),$("end_date")].forEach(el=>el.addEventListener("change",()=>{invalidateEvidenceCache();clearPriceReview();populateMealCounts();updateCostInputs();updateTripType();updateManualPriceVisibility();}));
 $("normal_stay_mode").addEventListener("change",()=>{updateCostInputs();clearPriceReview();});
-$("no_vehicle").addEventListener("change",()=>{$("manual_energy_price").value="";invalidateEvidenceCache();updateCostInputs();clearPriceReview();updateVehicle();});
-$("public_vehicle").addEventListener("change",()=>{updateCostInputs();clearPriceReview();updateManualPriceVisibility();});
+$("no_vehicle").addEventListener("change",()=>{
+  if($("no_vehicle").checked)clearTollEvidence();
+  $("manual_energy_price").value="";invalidateEvidenceCache();updateCostInputs();clearPriceReview();updateVehicle();
+});
+$("public_vehicle").addEventListener("change",()=>{
+  if($("public_vehicle").checked)clearTollEvidence();
+  updateCostInputs();clearPriceReview();updateManualPriceVisibility();
+});
 ["training_meal_claim_count","provided_meals_count","toll_fee","parking_fee","lodging_fee","manual_energy_price"].forEach(id=>$(id).addEventListener("change",()=>{clearPriceReview();updateManualPriceVisibility();}));
+$("toll_fee").addEventListener("input",()=>{tollOcrManaged=false;});
+$("tollImageFiles").addEventListener("change",async e=>{
+  for(const file of [...e.target.files])await addTollEvidenceFile(file);
+  e.target.value="";
+});
+document.addEventListener("paste",async e=>{
+  if(!$("tab2").classList.contains("active")||$("tollImageFiles").disabled)return;
+  const images=[...(e.clipboardData?.items||[])].filter(item=>item.type.startsWith("image/")).map(item=>item.getAsFile()).filter(Boolean);
+  if(!images.length)return;
+  e.preventDefault();
+  for(const file of images)await addTollEvidenceFile(file);
+});
 ["origin","destination"].forEach(id=>$(id).addEventListener("input",clearDistanceReview));
 
 const today=seoulToday(); $("travel_date").value=today; $("end_date").value=today;
@@ -527,7 +663,7 @@ $("pdfButton").addEventListener("click",async()=>{
   try{
     const current=basePayload();
     const cachedEvidence=await evidenceForPdf();
-    const pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,passengers:current.passengers,purpose:current.purpose,manual_energy_price:current.manual_energy_price,evidence_image_base64:cachedEvidence};
+    const pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,passengers:current.passengers,purpose:current.purpose,manual_energy_price:current.manual_energy_price,evidence_image_base64:cachedEvidence,toll_evidence_images_base64:tollEvidenceDataUrls()};
     $("globalStatus").textContent=cachedEvidence?"준비된 오피넷 증빙을 재사용하여 PDF 생성 중...":"PDF 생성 중...";
     const response=await fetch("/api/report.pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pdfPayload)});
     if(!response.ok){const d=await response.json();throw new Error(d.detail||"PDF 생성 실패");}
@@ -549,7 +685,7 @@ $("regulationPdfButton").addEventListener("click",async()=>{
   try{
     const current=basePayload();
     const cachedEvidence=await evidenceForPdf();
-    const pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,passengers:current.passengers,purpose:current.purpose,manual_energy_price:current.manual_energy_price,evidence_image_base64:cachedEvidence};
+    const pdfPayload={...lastPayload,affiliation:current.affiliation,position:current.position,traveler_name:current.traveler_name,passengers:current.passengers,purpose:current.purpose,manual_energy_price:current.manual_energy_price,evidence_image_base64:cachedEvidence,toll_evidence_images_base64:tollEvidenceDataUrls()};
     $("globalStatus").textContent=cachedEvidence?"준비된 오피넷 증빙을 재사용하여 여비신청서 생성 중...":"여비신청서 생성 중...";
     const response=await fetch("/api/report-regulation.pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pdfPayload)});
     if(!response.ok){const d=await response.json();throw new Error(d.detail||"여비신청서 생성 실패");}

@@ -1,5 +1,6 @@
 import base64
 import binascii
+import io
 import os
 import shutil
 import tempfile
@@ -9,6 +10,7 @@ from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from PIL import Image, ImageOps
 
 from app.models import (
     DistanceResponse,
@@ -24,6 +26,7 @@ from app.services.opinet_evidence_service import generate_opinet_evidence
 from app.services.pdf_service import generate_estimate_pdf, generate_regulation_pdf
 from app.services.travel_service import estimate_travel, resolve_distance, resolve_price
 from app.services.travel_pdf_import import parse_travel_pdf
+from app.services.toll_ocr_service import extract_toll_ocr
 
 router = APIRouter(tags=["travel"])
 
@@ -64,6 +67,57 @@ def _prefetched_evidence_path(data_url: str | None, evidence_dir: str) -> str | 
     with open(path, "wb") as fp:
         fp.write(raw)
     return path
+
+
+def _toll_evidence_paths(data_urls: list[str], evidence_dir: str) -> list[str]:
+    paths: list[str] = []
+    for index, data_url in enumerate((data_urls or [])[:4], start=1):
+        payload = (data_url or "").strip()
+        if not payload:
+            continue
+        if "," in payload:
+            header, payload = payload.split(",", 1)
+            if "base64" not in header.lower():
+                raise ValueError("통행료 증빙 이미지 형식을 확인해주세요.")
+        try:
+            raw = base64.b64decode(payload, validate=True)
+        except (binascii.Error, ValueError):
+            raise ValueError("통행료 증빙 이미지 디코딩에 실패했습니다.")
+        if not raw:
+            continue
+        if len(raw) > 8 * 1024 * 1024:
+            raise ValueError("통행료 증빙 이미지는 장당 8MB 이하만 사용할 수 있습니다.")
+        try:
+            image = Image.open(io.BytesIO(raw))
+            image = ImageOps.exif_transpose(image).convert("RGB")
+        except Exception as exc:
+            raise ValueError("통행료 증빙 이미지 형식을 확인해주세요.") from exc
+        max_side = 2400
+        scale = min(1.0, max_side / max(image.width, image.height))
+        if scale < 1:
+            image = image.resize(
+                (max(1, int(image.width*scale)), max(1, int(image.height*scale))),
+                Image.Resampling.LANCZOS,
+            )
+        path = os.path.join(evidence_dir, f"toll_evidence_{index}.png")
+        image.save(path, format="PNG", optimize=True)
+        paths.append(path)
+    return paths
+
+
+@router.post("/toll-evidence-ocr")
+async def toll_evidence_ocr(file: UploadFile = File(...)):
+    if file.content_type not in {"image/png", "image/jpeg", "image/webp"}:
+        raise HTTPException(status_code=400, detail="PNG, JPG, WEBP 이미지만 사용할 수 있습니다.")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="빈 이미지입니다.")
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="통행료 증빙 이미지는 8MB 이하만 사용할 수 있습니다.")
+    try:
+        return extract_toll_ocr(data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/import-travel-pdf")
@@ -215,12 +269,14 @@ async def report_pdf(req: TravelRequest, background_tasks: BackgroundTasks):
             except Exception as e:
                 evidence_error = str(e)
 
+        toll_evidence_paths = _toll_evidence_paths(req.toll_evidence_images_base64, evidence_dir)
         await generate_estimate_pdf(
             req,
             result,
             output_path,
             evidence_path=evidence_path,
             evidence_error=evidence_error,
+            toll_evidence_paths=toll_evidence_paths,
         )
 
         background_tasks.add_task(os.remove, output_path)
@@ -273,12 +329,14 @@ async def report_regulation_pdf(req: TravelRequest, background_tasks: Background
             except Exception as e:
                 evidence_error = str(e)
 
+        toll_evidence_paths = _toll_evidence_paths(req.toll_evidence_images_base64, evidence_dir)
         await generate_regulation_pdf(
             req,
             result,
             output_path,
             evidence_path=evidence_path,
             evidence_error=evidence_error,
+            toll_evidence_paths=toll_evidence_paths,
         )
 
         background_tasks.add_task(os.remove, output_path)

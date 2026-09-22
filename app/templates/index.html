@@ -203,6 +203,22 @@
                 <label>숙박비<input id="lodging_fee" type="number" min="0" step="1" value="0"></label>
               </div>
 
+              <section id="tollEvidencePanel" class="toll-evidence-panel">
+                <div class="toll-evidence-head">
+                  <div>
+                    <strong>통행료 증빙</strong>
+                    <span>하이패스 이용내역 캡처를 붙여넣으면 금액 후보를 자동으로 찾습니다.</span>
+                  </div>
+                  <b id="tollOcrSum">선택 합계 0원</b>
+                </div>
+                <label id="tollPasteZone" class="toll-paste-zone" for="tollImageFiles" tabindex="0">
+                  <input id="tollImageFiles" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+                  <strong>Ctrl+V로 캡처 붙여넣기</strong>
+                  <span>또는 클릭해서 이미지 선택 · 최대 4장 · OCR 결과는 반드시 확인해주세요.</span>
+                </label>
+                <div id="tollEvidenceList" class="toll-evidence-list"></div>
+              </section>
+
               <div class="section-label">신청인 정보 · PDF 작성용</div>
               <div class="person-grid">
                 <label>소속<input id="affiliation" type="text" placeholder="예: 천안버들유치원"></label>

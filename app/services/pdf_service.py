@@ -87,6 +87,24 @@ def _image_data_uri(path: str | None) -> str | None:
     return f"data:image/png;base64,{encoded}"
 
 
+def _toll_evidence_html(paths: list[str] | None) -> str:
+    uris = [_image_data_uri(path) for path in (paths or [])]
+    uris = [uri for uri in uris if uri]
+    if not uris:
+        return ""
+    count_class = f" count-{min(len(uris), 4)}"
+    images = "".join(
+        f'<div class="toll-evidence-item"><img class="toll-evidence-img" src="{uri}" alt="통행료 증빙"></div>'
+        for uri in uris[:4]
+    )
+    return (
+        '<section class="toll-evidence-section">'
+        '<div class="evidence-title">통행료 증빙</div>'
+        f'<div class="toll-evidence-grid{count_class}">{images}</div>'
+        '</section>'
+    )
+
+
 async def generate_estimate_pdf(
     req: TravelRequest,
     result: EstimateResponse,
@@ -94,10 +112,13 @@ async def generate_estimate_pdf(
     *,
     evidence_path: str | None = None,
     evidence_error: str | None = None,
+    toll_evidence_paths: list[str] | None = None,
 ) -> str:
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     evidence_uri = _image_data_uri(evidence_path)
+    toll_evidence_html = _toll_evidence_html(toll_evidence_paths)
+    evidence_page_class = " with-toll" if toll_evidence_html else ""
     origin = _place(result.resolved_origin_name, result.resolved_origin_address, req.origin)
     destination = _place(result.resolved_destination_name, result.resolved_destination_address, req.destination)
     applicant = " / ".join(v for v in [req.affiliation, req.position, req.traveler_name] if v) or "-"
@@ -164,7 +185,23 @@ async def generate_estimate_pdf(
   .basis {{ border: 1px solid #cbd5e1; padding: 3mm; line-height: 1.6; min-height: 27mm; font-size: 11.5px; }}
   .evidence-wrap {{ height: 218mm; border: 1px solid #cbd5e1; padding: 2mm; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; }}
   .evidence-img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
+  .evidence-page.with-toll .evidence-wrap {{ height: 110mm; }}
+  .evidence-title {{ font-size: 11.5px; font-weight: 800; margin: 2mm 0 1mm; color:#333; }}
+  .toll-evidence-section {{ margin-top: 2.5mm; }}
+  .toll-evidence-grid {{ height: 82mm; display:grid; grid-template-columns:1fr; gap:2mm; }}
+  .toll-evidence-grid.count-2 {{ grid-template-columns:1fr 1fr; }}
+  .toll-evidence-grid.count-3,.toll-evidence-grid.count-4 {{ grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; }}
+  .toll-evidence-item {{ min-width:0; min-height:0; border:1px solid #aaa; padding:1mm; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#fff; }}
+  .toll-evidence-img {{ max-width:100%; max-height:100%; object-fit:contain; }}
   .evidence-empty {{ text-align: center; color: #475569; line-height: 1.8; padding: 20mm; font-size: 12px; }}
+  .evidence-page.with-toll .evidence-wrap {{ height: 112mm; }}
+  .evidence-title {{ font-size: 11.5px; font-weight: 800; margin: 2mm 0 1mm; color:#334155; }}
+  .toll-evidence-section {{ margin-top: 2.5mm; }}
+  .toll-evidence-grid {{ height: 82mm; display:grid; grid-template-columns:1fr; gap:2mm; }}
+  .toll-evidence-grid.count-2 {{ grid-template-columns:1fr 1fr; }}
+  .toll-evidence-grid.count-3,.toll-evidence-grid.count-4 {{ grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; }}
+  .toll-evidence-item {{ min-width:0; min-height:0; border:1px solid #cbd5e1; padding:1mm; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#fff; }}
+  .toll-evidence-img {{ max-width:100%; max-height:100%; object-fit:contain; }}
   .footer {{ position: absolute; bottom: 0; left: 0; right: 0; text-align: center; color: #64748b; font-size: 9.5px; }}
 </style>
 </head>
@@ -217,7 +254,7 @@ async def generate_estimate_pdf(
     <div class="footer">1 / 2</div>
   </section>
 
-  <section class="page">
+  <section class="page evidence-page{evidence_page_class}">
     <h1>산출근거 및 증빙</h1>
     <div class="page2-head">
       <div class="basis">
@@ -233,6 +270,7 @@ async def generate_estimate_pdf(
     </div>
     <div class="small" style="margin-bottom:2mm">증빙상태: {_e(evidence_status)}</div>
     <div class="evidence-wrap">{evidence_block}</div>
+    {toll_evidence_html}
     <div class="footer">2 / 2</div>
   </section>
 </body>
@@ -414,11 +452,14 @@ async def generate_regulation_pdf(
     *,
     evidence_path: str | None = None,
     evidence_error: str | None = None,
+    toll_evidence_paths: list[str] | None = None,
 ) -> str:
     """Generate a simplified regulation-style domestic travel settlement PDF."""
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     evidence_uri = _image_data_uri(evidence_path)
+    toll_evidence_html = _toll_evidence_html(toll_evidence_paths)
+    evidence_page_class = " with-toll" if toll_evidence_html else ""
     passenger_names = _passenger_names(req.passengers)
     passenger_signature_html = ""
     if passenger_names:
@@ -861,7 +902,7 @@ async def generate_regulation_pdf(
     <div class="footer">1 / 2 · 규정서식 간소형</div>
   </section>
 
-  <section class="page">
+  <section class="page evidence-page{evidence_page_class}">
     <h1 class="page2-title">산출근거 및 증빙</h1>
     <div class="page2-head">
       <div class="evidence-basis">
@@ -879,6 +920,7 @@ async def generate_regulation_pdf(
       </div>
     </div>
     {evidence_detail_html}
+    {toll_evidence_html}
     <div class="footer">2 / 2 · 규정서식 간소형</div>
   </section>
 </body>

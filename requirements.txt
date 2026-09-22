@@ -8,3 +8,5 @@ pypdf==5.7.0
 python-multipart==0.0.20
 google-cloud-storage==3.3.0
 google-cloud-firestore==2.21.0
+Pillow==11.3.0
+pytesseract==0.3.13

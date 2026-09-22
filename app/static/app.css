@@ -417,3 +417,33 @@ button:disabled{opacity:.45;cursor:not-allowed}
   .section-inline-note,.check-inline-note{white-space:normal}
   .check-inline-note{width:100%;margin-left:27px}
 }
+
+.toll-evidence-panel{margin:12px 0 4px;border:1px solid #dbe5f0;border-radius:13px;background:#f9fbfd;padding:13px}
+.toll-evidence-panel.disabled{opacity:.55;pointer-events:none}
+.toll-evidence-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.toll-evidence-head>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.toll-evidence-head strong{font-size:14px;color:#27415f}
+.toll-evidence-head span{font-size:12.5px;color:#6a7c91;line-height:1.45}
+.toll-evidence-head>b{white-space:nowrap;font-size:13px;color:#174ea6;background:#eaf2ff;border-radius:999px;padding:6px 9px}
+.toll-paste-zone{margin:0;border:1.5px dashed #9eb8da;border-radius:11px;background:#fff;padding:14px;min-height:72px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;cursor:pointer}
+.toll-paste-zone:focus{outline:none;border-color:#4c82e8;box-shadow:0 0 0 3px rgba(37,99,235,.10)}
+.toll-paste-zone strong{font-size:14px;color:#31567e}
+.toll-paste-zone span{margin-top:3px;font-size:12px;color:#7a899a;font-weight:550}
+.toll-evidence-list{display:grid;gap:10px;margin-top:10px}
+.toll-evidence-item{border:1px solid #dfe7f0;border-radius:11px;background:#fff;padding:10px}
+.toll-evidence-item-head{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:10px;align-items:start}
+.toll-evidence-thumb{width:76px;height:58px;object-fit:cover;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc}
+.toll-evidence-meta strong{display:block;font-size:13px;color:#334155}
+.toll-evidence-meta span{display:block;margin-top:3px;font-size:12px;color:#718096;line-height:1.35}
+.toll-remove{min-height:0;padding:6px 8px;border-radius:8px;background:#eef2f7;color:#52657d;font-size:12px}
+.toll-candidates{display:grid;gap:6px;margin-top:9px}
+.toll-candidate-row{display:grid;grid-template-columns:22px 92px minmax(0,1fr);gap:8px;align-items:center;padding:6px 8px;border-radius:8px;background:#f8fafc;border:1px solid #edf2f7}
+.toll-candidate-row input[type="checkbox"]{width:17px;height:17px;min-height:0;margin:0}
+.toll-candidate-row input[type="number"]{min-height:34px;margin:0;padding:6px 8px;border-radius:8px;font-size:13px;text-align:right}
+.toll-candidate-line{min-width:0;font-size:11.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toll-ocr-empty{margin-top:8px;padding:8px 10px;border-radius:8px;background:#fff7ed;color:#9a5b18;font-size:12px;line-height:1.45}
+@media(max-width:780px){
+  .toll-evidence-head{flex-direction:column}
+  .toll-evidence-item-head{grid-template-columns:68px minmax(0,1fr) auto}
+  .toll-evidence-thumb{width:68px;height:54px}
+}

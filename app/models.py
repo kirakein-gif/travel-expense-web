@@ -43,6 +43,7 @@ class TravelRequest(BaseModel):
     passengers: Optional[str] = None
     purpose: Optional[str] = None
     evidence_image_base64: Optional[str] = None
+    toll_evidence_images_base64: list[str] = Field(default_factory=list, max_length=4)
 
 
 class DistanceResponse(BaseModel):
