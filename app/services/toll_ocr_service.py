@@ -9,7 +9,7 @@ import pytesseract
 from pytesseract import Output
 
 
-_AMOUNT_TOKEN = r"([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{2,6})"
+_AMOUNT_TOKEN = r"([0-9]{1,3}(?:[,.][0-9]{3})+(?:[48])?|[0-9]{2,6})"
 _VEHICLE_RE = re.compile(r"([1-6])\s*종")
 _SUPPLY_RE = re.compile(rf"공\s*급\s*가\s*액[^0-9]{{0,10}}{_AMOUNT_TOKEN}\s*원?")
 _VAT_RE = re.compile(rf"부\s*가\s*세[^0-9]{{0,10}}{_AMOUNT_TOKEN}\s*원?")
@@ -17,10 +17,15 @@ _CLASS_TOTAL_RE = re.compile(rf"([1-6])\s*종[^0-9]{{0,14}}{_AMOUNT_TOKEN}\s*원
 _SPLIT_WORD_RE = re.compile(rf"\b(KEC|CNE)\b[^0-9]{{0,14}}{_AMOUNT_TOKEN}\s*원?", re.IGNORECASE)
 
 
-def _money(value: str | None) -> int | None:
+def _money(value: str | None, *, cleanup_won_glyph: bool = False) -> int | None:
     if not value:
         return None
-    number = int(value.replace(",", ""))
+    raw = value.replace(",", "").replace(".", "")
+    if cleanup_won_glyph and len(raw) >= 4 and raw[-1] in {"4", "8"}:
+        trimmed = raw[:-1]
+        if trimmed.isdigit() and int(trimmed) >= 100 and int(trimmed) % 10 == 0:
+            raw = trimmed
+    number = int(raw)
     if number < 10 or number > 500000:
         return None
     return number
@@ -46,7 +51,7 @@ def _source_b(lines: list[str]) -> tuple[int | None, int | None]:
         if not match:
             continue
         vehicle_class = int(match.group(1))
-        amount = _money(match.group(2))
+        amount = _money(match.group(2), cleanup_won_glyph=True)
         if amount is not None:
             return amount, vehicle_class
     return None, None
@@ -56,7 +61,7 @@ def _source_c(lines: list[str]) -> tuple[int | None, list[dict]]:
     parts: list[dict] = []
     for line in lines:
         for match in _SPLIT_WORD_RE.finditer(line):
-            amount = _money(match.group(2))
+            amount = _money(match.group(2), cleanup_won_glyph=True)
             if amount is not None:
                 parts.append({"operator": match.group(1).upper(), "amount": amount})
     if not parts:

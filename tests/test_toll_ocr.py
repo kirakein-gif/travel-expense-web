@@ -63,3 +63,31 @@ def test_vehicle_classes_two_to_five_show_review_warning_only():
     assert result["vehicle_class"] == 3
     assert result["vehicle_warning"] is True
     assert "차종 확인" in result["vehicle_note"]
+
+
+def test_source_a_accepts_dot_as_thousands_separator():
+    result = analyze_receipt_lines(
+        ["공급가액:1.482원 부가세:18원"]
+    )
+    assert result["amount"] == 1500
+    assert result["sources"]["A"] == 1500
+    assert result["status"] == "review"
+
+
+def test_source_c_recovers_common_won_glyph_ocr_tail():
+    result = analyze_receipt_lines(
+        ["공급가액 : 1,482원 부가세 : 18원", "KEC 13004 (카드)", "CNE 2004 (카드)"]
+    )
+    assert result["sources"]["A"] == 1500
+    assert result["sources"]["C"] == 1500
+    assert result["amount"] == 1500
+    assert result["status"] == "confirmed"
+
+
+def test_source_c_accepts_dot_thousands_separator():
+    result = analyze_receipt_lines(
+        ["공급가액:2.182원 부가세:218원", "CNE 2.400원 (카드)"]
+    )
+    assert result["sources"]["A"] == 2400
+    assert result["sources"]["C"] == 2400
+    assert result["status"] == "confirmed"
