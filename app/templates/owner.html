@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>딸깍 여비정산서 · 관리자 접속</title>
+</head>
+<body style="margin:0;background:#f5f8fc;font-family:'Malgun Gothic','맑은 고딕',sans-serif;color:#17253a;">
+  <main style="max-width:480px;margin:10vh auto;padding:0 20px;">
+    <section style="background:#fff;border:1px solid #dce6f2;border-radius:14px;padding:32px 28px;box-shadow:0 10px 30px rgba(30,64,175,.06);">
+      <div style="font-size:13px;font-weight:800;letter-spacing:1px;color:#2563eb;margin-bottom:8px;">DDALKKAK · OWNER</div>
+      <h1 style="font-size:25px;margin:0 0 10px;color:#0f172a;">관리자 접속</h1>
+      <p style="font-size:14px;line-height:1.7;color:#64748b;margin:0 0 20px;">관리자 접속키를 입력하면 공식 안내 페이지를 거치지 않고 사용할 수 있습니다.</p>
+      {% if error %}
+      <div style="background:#fff4f4;border:1px solid #fecaca;color:#b91c1c;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;">{{ error }}</div>
+      {% endif %}
+      <form method="post" action="/owner">
+        <label style="display:block;font-size:13px;font-weight:800;color:#334155;margin-bottom:7px;" for="access_key">관리자 접속키</label>
+        <input id="access_key" name="access_key" type="password" required autocomplete="current-password"
+          style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:12px 13px;font-size:15px;margin-bottom:14px;">
+        <button type="submit" style="width:100%;border:0;border-radius:8px;background:#2563eb;color:#fff;font-size:15px;font-weight:800;padding:12px 16px;cursor:pointer;">접속</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
