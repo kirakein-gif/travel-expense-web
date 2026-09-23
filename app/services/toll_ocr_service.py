@@ -544,17 +544,23 @@ def extract_toll_ocr(image_bytes: bytes) -> dict:
     separators = _find_vertical_separators(image)
     plans: list[tuple[str, list[Image.Image]]] = []
 
-    if separators:
-        plans.append(("separator", _regions_from_separators(image, separators)))
-        # Keep the whole image as a safety comparison in case a receipt's own
-        # table border was mistaken for a divider.
-        plans.append(("whole", [image]))
-    else:
-        plans.append(("whole", [image]))
-
     analyzed: list[tuple[str, list[dict]]] = []
-    for name, regions in plans:
-        analyzed.append((name, _analyze_plan(regions)))
+
+    if separators:
+        separator_regions = _regions_from_separators(image, separators)
+        separator_results = _analyze_plan(separator_regions)
+        analyzed.append(("separator", separator_results))
+
+        # If every detected receipt is already confirmed, do not spend another
+        # Tesseract pass on the whole image. Otherwise compare against the whole
+        # image in case a receipt's own table border was mistaken for a divider.
+        separator_reliable = bool(separator_results) and all(
+            result.get("status") == "confirmed" for result in separator_results
+        )
+        if not separator_reliable:
+            analyzed.append(("whole", _analyze_plan([image])))
+    else:
+        analyzed.append(("whole", _analyze_plan([image])))
 
     best_name, receipts = max(analyzed, key=lambda item: _plan_score(item[1]))
 
