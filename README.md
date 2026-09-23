@@ -38,8 +38,8 @@ Cloud Run 로그에서는 `[OPINET]` 접두어로 메모리/Firestore 적중, �
 
 ## 공식 진입 접근제어
 - 일반 사용자는 공식 사용설명서의 `/enter` 버튼을 통해 세션을 발급받습니다.
-- 허용 진입점: `https://bbs.ckwiki.kr/relese/73` 및 동일 게시글의 `/bbs/board.php?bo_table=relese&wr_id=73`
-- 게시글 링크에는 `referrerpolicy="unsafe-url"`을 사용하고 `rel="noreferrer"`는 사용하지 않습니다.
+- 게시판이 Referer를 제거하는 환경을 고려해 `/enter` 자체를 공식 진입문으로 사용합니다.
+- Cloud Run 메인 주소와 `/api/*`의 직접 접근은 유효한 세션이 없으면 차단합니다.
 - 관리자 직접 접속: `/owner`에서 `OWNER_ACCESS_KEY` 입력
 - 인증 쿠키는 HttpOnly + Secure + SameSite=Lax이며 브라우저 세션 쿠키로 발급되고, 내부 토큰은 최대 12시간 유효합니다.
 - `ACCESS_CONTROL_ENABLED=false`가 기본값입니다. 게시글 링크와 Secret Manager 설정을 마친 뒤 `true`로 전환합니다.
