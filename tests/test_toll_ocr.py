@@ -1,4 +1,10 @@
-from app.services.toll_ocr_service import analyze_receipt_lines
+from PIL import Image, ImageDraw
+
+from app.services.toll_ocr_service import (
+    _find_vertical_separators,
+    _merge_pass_results,
+    analyze_receipt_lines,
+)
 
 
 def test_sample_pattern_left_receipt_confirms_a_b_c():
@@ -91,3 +97,64 @@ def test_source_c_accepts_dot_thousands_separator():
     assert result["sources"]["A"] == 2400
     assert result["sources"]["C"] == 2400
     assert result["status"] == "confirmed"
+
+
+
+def test_amount_pattern_accepts_space_thousands_separator():
+    result = analyze_receipt_lines(
+        ["1종 2 400원", "공급가액 2 182원", "부가세 218원"]
+    )
+    assert result["sources"]["A"] == 2400
+    assert result["sources"]["B"] == 2400
+    assert result["status"] == "confirmed"
+
+
+def test_multi_pass_same_amount_stays_review_when_only_one_pattern_exists():
+    lines = ["공급가액 1,482원", "부가세 18원"]
+    result_a = analyze_receipt_lines(lines)
+    result_b = analyze_receipt_lines(lines)
+    merged = _merge_pass_results(
+        [
+            ("gray_psm6", lines, result_a),
+            ("gray_psm11", lines, result_b),
+        ]
+    )
+    assert merged["amount"] == 1500
+    assert merged["status"] == "review"
+    assert "복수 OCR 판독값 일치" in merged["note"]
+
+
+def test_multi_pass_two_semantic_sources_confirm():
+    a_lines = ["공급가액 1,482원", "부가세 18원"]
+    b_lines = ["1종 1,500원"]
+    merged = _merge_pass_results(
+        [
+            ("gray_psm6", a_lines, analyze_receipt_lines(a_lines)),
+            ("gray_psm11", b_lines, analyze_receipt_lines(b_lines)),
+        ]
+    )
+    assert merged["amount"] == 1500
+    assert merged["sources"]["A"] == 1500
+    assert merged["sources"]["B"] == 1500
+    assert merged["status"] == "confirmed"
+
+
+def test_separator_detection_finds_center_line():
+    image = Image.new("RGB", (1000, 600), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((70, 80, 420, 520), outline="black", width=4)
+    draw.rectangle((580, 80, 930, 520), outline="black", width=4)
+    draw.rectangle((498, 30, 502, 570), fill="black")
+
+    separators = _find_vertical_separators(image)
+    assert separators
+    assert abs(separators[0] - 500) <= 12
+
+
+def test_separator_detection_does_not_split_single_receipt_border():
+    image = Image.new("RGB", (700, 900), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((70, 70, 630, 830), outline="black", width=4)
+    draw.rectangle((130, 180, 570, 230), outline="black", width=3)
+    separators = _find_vertical_separators(image)
+    assert separators == []
