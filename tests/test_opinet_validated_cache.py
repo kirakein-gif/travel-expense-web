@@ -103,3 +103,33 @@ def test_api_and_web_mismatch_is_rejected(monkeypatch):
             )
         )
     assert called["save"] is False
+
+
+def test_cached_price_uses_same_user_facing_source_without_cache_word(monkeypatch):
+    async def fake_api(**kwargs):
+        return {
+            "price": 1680.2,
+            "cache_hit": True,
+            "api_date": "2026-09-22",
+            "area_code": "041",
+            "product_code": "B027",
+            "validated": True,
+            "source_url": "api",
+        }
+
+    monkeypatch.setattr(price, "get_historical_area_price", fake_api)
+
+    result = asyncio.run(
+        price.get_energy_price(
+            date(2026, 9, 22), "gasoline", "충청남도", "아산시"
+        )
+    )
+
+    assert result["cache_hit"] is True
+    assert result["source"] == "한국석유공사 오피넷 · API/웹 검증 완료"
+    assert "캐시" not in result["source"]
+
+
+def test_web_ui_does_not_expose_cache_word():
+    with open("app/static/app.js", encoding="utf-8") as fp:
+        assert "캐시" not in fp.read()
