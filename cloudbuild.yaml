@@ -16,6 +16,7 @@ steps:
       - "--memory=2Gi"
       - "--cpu=1"
       - "--timeout=120"
+      - "--update-env-vars=CACHE_BACKEND=firestore"
 substitutions:
   _REGION: asia-northeast3
   _REPOSITORY: travel-expense
