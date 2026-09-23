@@ -32,7 +32,19 @@
 6. API/웹 가격이 다르거나 웹 검증에 실패하면 공유 캐시에 저장하지 않고 오류로 처리합니다.
 7. 시도 코드·시군구 코드표와 웹의 시도 전체 가격표도 재사용하여 부가 조회를 줄입니다.
 
-운영 Cloud Run 배포는 `CACHE_BACKEND=firestore`를 자동 설정합니다. Firestore가 일시적으로 사용할 수 없는 경우 서비스 자체가 중단되지 않도록 해당 인스턴스의 메모리 캐시로 안전하게 폴백합니다.\n\nCloud Run 로그에서는 `[OPINET]` 접두어로 메모리/Firestore 적중, 실제 API 호출, 웹 검증, 검증값 저장, 증빙 생성 경로를 확인할 수 있습니다. 웹 UI와 PDF에는 캐시 여부 같은 내부 구현 정보는 표시하지 않습니다.
+운영 Cloud Run 배포는 `CACHE_BACKEND=firestore`를 자동 설정합니다. Firestore가 일시적으로 사용할 수 없는 경우 서비스 자체가 중단되지 않도록 해당 인스턴스의 메모리 캐시로 안전하게 폴백합니다.
+
+Cloud Run 로그에서는 `[OPINET]` 접두어로 메모리/Firestore 적중, 실제 API 호출, 웹 검증, 검증값 저장, 증빙 생성 경로를 확인할 수 있습니다. 웹 UI와 PDF에는 캐시 여부 같은 내부 구현 정보는 표시하지 않습니다.
+
+## 공식 진입 접근제어
+- 일반 사용자는 공식 사용설명서의 `/enter` 버튼을 통해 세션을 발급받습니다.
+- 허용 진입점: `https://bbs.ckwiki.kr/relese/73` 및 동일 게시글의 `/bbs/board.php?bo_table=relese&wr_id=73`
+- 게시글 링크에는 `referrerpolicy="unsafe-url"`을 사용하고 `rel="noreferrer"`는 사용하지 않습니다.
+- 관리자 직접 접속: `/owner`에서 `OWNER_ACCESS_KEY` 입력
+- 인증 쿠키는 HttpOnly + Secure + SameSite=Lax이며 브라우저 세션 쿠키로 발급되고, 내부 토큰은 최대 12시간 유효합니다.
+- `ACCESS_CONTROL_ENABLED=false`가 기본값입니다. 게시글 링크와 Secret Manager 설정을 마친 뒤 `true`로 전환합니다.
+- 접근제어 활성화 시 `/api/*`도 동일 세션으로 보호합니다.
+- Cloud Run 로그에서 `[ACCESS]` 접두어로 허용/차단/관리자 로그인 상태를 확인할 수 있습니다.
 
 ## 내포 기준점
 현재 개발 기본값은 `충남 홍성군 홍북읍 선화로 22(충청남도교육청)`입니다.
