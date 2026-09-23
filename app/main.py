@@ -5,11 +5,12 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.config import ACCESS_CONTROL_ENABLED, ACCESS_COOKIE_NAME, OWNER_ACCESS_KEY
+from app.config import ACCESS_CONTROL_ENABLED, ACCESS_COOKIE_NAME, ACCESS_ENTRY_MODE, OWNER_ACCESS_KEY
 from app.routes.travel import router as travel_router
 from app.services.access_service import (
     OFFICIAL_GUIDE_URL,
     create_session_token,
+    is_allowed_referer,
     owner_key_matches,
     verify_session_token,
 )
@@ -93,11 +94,18 @@ async def official_entry(request: Request):
             status_code=503,
         )
 
-    # Some bulletin-board renderers force rel=noreferrer and strip
-    # referrerpolicy attributes. Treat /enter itself as the official gateway
-    # so the guide page only needs a stable link.
     referer = request.headers.get("referer")
-    logger.info("[ACCESS] ENTRY_ACCEPTED referer=%s mode=entry-link", referer or "-")
+    if ACCESS_ENTRY_MODE == "referer":
+        if not is_allowed_referer(referer):
+            logger.info("[ACCESS] ENTRY_REJECTED referer=%s mode=referer", referer or "-")
+            return _access_required(request)
+        logger.info("[ACCESS] ENTRY_ACCEPTED referer=%s mode=referer", referer)
+    else:
+        # Some bulletin-board renderers force rel=noreferrer and strip
+        # referrerpolicy attributes. In link mode, /enter itself is the
+        # official gateway so the guide page only needs a stable link.
+        logger.info("[ACCESS] ENTRY_ACCEPTED referer=%s mode=entry-link", referer or "-")
+
     return _grant_access(RedirectResponse(url="/", status_code=303))
 
 
