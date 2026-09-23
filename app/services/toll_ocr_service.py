@@ -42,7 +42,7 @@ def _money(value: str | None, *, cleanup_won_glyph: bool = False) -> int | None:
         .replace(" ", "")
         .replace("\u00a0", "")
     )
-    if cleanup_won_glyph and len(raw) >= 4 and raw[-1] in {"4", "8"}:
+    if cleanup_won_glyph and len(raw) >= 4 and raw[-1] in {"2", "4", "8"}:
         trimmed = raw[:-1]
         if trimmed.isdigit() and int(trimmed) >= 100 and int(trimmed) % 10 == 0:
             raw = trimmed
