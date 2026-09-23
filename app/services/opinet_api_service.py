@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -10,6 +11,8 @@ import httpx
 
 from app.config import OPINET_API_KEY
 from app.services.cache_service import cache
+
+logger = logging.getLogger("uvicorn.error")
 
 API_BASE = "https://www.opinet.co.kr/api"
 RECENT_AREA_ENDPOINT = "areaAvgRecentPrice.do"
@@ -80,6 +83,12 @@ async def _request_once(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     params = {"out": "json", auth_name: OPINET_API_KEY}
     params.update({key: value for key, value in extra.items() if value})
+    logger.info(
+        "[OPINET] API_CALL endpoint=%s auth=%s params=%s",
+        endpoint,
+        auth_name,
+        {key: value for key, value in extra.items() if value},
+    )
 
     async with httpx.AsyncClient(timeout=20) as client:
         response = await client.get(f"{API_BASE}/{endpoint}", params=params)
@@ -314,7 +323,7 @@ async def save_validated_historical_area_price(
     web_price = float(web_price)
     if abs(api_price - web_price) > 0.011:
         raise RuntimeError(
-            "오피넷 API 가격과 웹조회 가격이 일치하지 않아 검증 캐시에 저장하지 않았습니다. "
+            "오피넷 API 가격과 웹조회 가격이 일치하지 않아 검증값으로 저장하지 않았습니다. "
             f"API {api_price:,.2f}원 / 웹 {web_price:,.2f}원"
         )
 
@@ -344,6 +353,13 @@ async def save_validated_historical_area_price(
         value,
         ttl_seconds=None,
     )
+    logger.info(
+        "[OPINET] VALIDATED_PRICE_SAVED date=%s area=%s product=%s price=%.2f",
+        api_date,
+        area_code,
+        product_code,
+        api_price,
+    )
     return value
 
 
@@ -364,7 +380,20 @@ async def get_historical_area_price(
     # eligible for permanent reuse. Legacy/raw cache entries are ignored.
     cached = await cache.get(VALIDATED_PRICE_NAMESPACE, target_key)
     if isinstance(cached, dict) and cached.get("validated") is True:
+        logger.info(
+            "[OPINET] VALIDATED_PRICE_HIT date=%s area=%s product=%s",
+            travel_date.isoformat(),
+            area_code,
+            product_code,
+        )
         return {**cached, "cache_hit": True}
+
+    logger.info(
+        "[OPINET] VALIDATED_PRICE_MISS date=%s area=%s product=%s",
+        travel_date.isoformat(),
+        area_code,
+        product_code,
+    )
 
     today = _seoul_today()
     if today - timedelta(days=7) <= travel_date < today:
