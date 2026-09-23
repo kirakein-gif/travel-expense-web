@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import time
 from collections import defaultdict
 from typing import Any, Awaitable, Callable
 
 CACHE_BACKEND = os.getenv("CACHE_BACKEND", "memory").lower()
+logger = logging.getLogger(__name__)
 
 
 class CacheService:
@@ -19,8 +21,12 @@ class CacheService:
         if CACHE_BACKEND != "firestore":
             return None
         if self._firestore is None:
-            from google.cloud import firestore
-            self._firestore = firestore.AsyncClient()
+            try:
+                from google.cloud import firestore
+                self._firestore = firestore.AsyncClient()
+            except Exception:
+                logger.exception("Firestore cache client initialization failed; memory cache fallback enabled")
+                return None
         return self._firestore
 
     @staticmethod
@@ -40,7 +46,11 @@ class CacheService:
         if db is None:
             return None
 
-        snap = await db.collection("travel_cache").document(self._doc_id(namespace, key)).get()
+        try:
+            snap = await db.collection("travel_cache").document(self._doc_id(namespace, key)).get()
+        except Exception:
+            logger.exception("Firestore cache read failed; continuing with memory cache")
+            return None
         if not snap.exists:
             return None
 
@@ -62,11 +72,14 @@ class CacheService:
         if db is None:
             return
 
-        await db.collection("travel_cache").document(self._doc_id(namespace, key)).set({
-            "value": value,
-            "expires_at": expires_at,
-            "updated_at": time.time(),
-        })
+        try:
+            await db.collection("travel_cache").document(self._doc_id(namespace, key)).set({
+                "value": value,
+                "expires_at": expires_at,
+                "updated_at": time.time(),
+            })
+        except Exception:
+            logger.exception("Firestore cache write failed; value retained in memory cache only")
 
     async def get_or_create(
         self,
