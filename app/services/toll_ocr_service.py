@@ -5,6 +5,7 @@ import logging
 import re
 import unicodedata
 import time
+from bisect import bisect_right
 from collections import Counter, defaultdict
 
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps, ImageStat
@@ -411,26 +412,112 @@ def _merge_pass_results(pass_results: list[tuple[str, list[str], dict]]) -> dict
     }
 
 
-def _analyze_region(image: Image.Image) -> dict:
-    passes: list[tuple[str, list[str], dict]] = []
-
-    def run(name: str, *, psm: int) -> dict:
-        lines = _ocr_variant(image, psm=psm, binary=False)
-        result = analyze_receipt_lines(lines)
-        passes.append((name, lines, result))
-        return result
-
-    # Recommended "보고서 인쇄" receipts are sparse and consistently laid out.
-    # One PSM 11 pass is normally enough after adjacent-line amount pairing.
-    first = run("gray_psm11", psm=11)
-    if first["status"] == "confirmed":
+def _analyze_with_initial_lines(
+    image: Image.Image,
+    initial_lines: list[str],
+    *,
+    initial_name: str,
+) -> dict:
+    initial_result = analyze_receipt_lines(initial_lines)
+    passes = [(initial_name, initial_lines, initial_result)]
+    if initial_result["status"] == "confirmed":
         merged = _merge_pass_results(passes)
         merged["note"] = "보고서 인쇄 빠른 판독 · 두 개 이상 패턴 일치"
         return merged
 
-    # Only the receipt that was not confirmed gets one additional layout pass.
-    run("gray_psm4", psm=4)
+    # Only a receipt that failed the shared sparse-text pass gets one extra
+    # OCR process. PSM 4 is effective for the compact receipt row layout.
+    fallback_lines = _ocr_variant(image, psm=4, binary=False)
+    fallback_result = analyze_receipt_lines(fallback_lines)
+    passes.append(("gray_psm4", fallback_lines, fallback_result))
     return _merge_pass_results(passes)
+
+
+def _analyze_region(image: Image.Image) -> dict:
+    initial_lines = _ocr_variant(image, psm=11, binary=False)
+    return _analyze_with_initial_lines(
+        image,
+        initial_lines,
+        initial_name="gray_psm11",
+    )
+
+
+def _ocr_separator_regions_once(
+    image: Image.Image,
+    separators: list[int],
+) -> list[list[str]]:
+    """Run one sparse-text OCR pass and partition tokens by x-position."""
+    prepared = _prepare_base_image(image)
+    gray = ImageOps.autocontrast(ImageOps.grayscale(prepared))
+    mean = ImageStat.Stat(gray).mean[0]
+    if mean < 105:
+        gray = ImageOps.invert(gray)
+        gray = ImageOps.autocontrast(gray)
+    gray = ImageEnhance.Contrast(gray).enhance(1.12)
+    gray = gray.filter(ImageFilter.UnsharpMask(radius=1.0, percent=135, threshold=3))
+
+    scale_x = gray.width / max(image.width, 1)
+    scaled_separators = [separator * scale_x for separator in separators]
+    config = "--oem 3 --psm 11 -c preserve_interword_spaces=1"
+
+    try:
+        data = pytesseract.image_to_data(
+            gray,
+            lang="kor+eng",
+            config=config,
+            output_type=Output.DICT,
+        )
+    except pytesseract.TesseractError:
+        data = pytesseract.image_to_data(
+            gray,
+            lang="eng",
+            config=config,
+            output_type=Output.DICT,
+        )
+
+    region_count = len(separators) + 1
+    grouped: list[dict[tuple[int, int, int], list[tuple[int, str]]]] = [
+        defaultdict(list) for _ in range(region_count)
+    ]
+
+    total = len(data.get("text", []))
+    block_nums = data.get("block_num", [0] * total)
+    par_nums = data.get("par_num", [0] * total)
+    line_nums = data.get("line_num", [0] * total)
+    lefts = data.get("left", [0] * total)
+    widths = data.get("width", [0] * total)
+    confs = data.get("conf", ["-1"] * total)
+
+    for i in range(total):
+        token = (data["text"][i] or "").strip()
+        if not token:
+            continue
+        try:
+            confidence = float(confs[i])
+        except (TypeError, ValueError):
+            confidence = -1
+        if 0 <= confidence < 18:
+            continue
+
+        center_x = float(lefts[i]) + float(widths[i]) / 2
+        region_index = bisect_right(scaled_separators, center_x)
+        region_index = min(max(region_index, 0), region_count - 1)
+        key = (int(block_nums[i]), int(par_nums[i]), int(line_nums[i]))
+        grouped[region_index][key].append((int(lefts[i]), token))
+
+    region_lines: list[list[str]] = []
+    for region in grouped:
+        lines: list[str] = []
+        for key in sorted(region):
+            line = " ".join(
+                token
+                for _, token in sorted(region[key], key=lambda item: item[0])
+            ).strip()
+            if line:
+                lines.append(line)
+        region_lines.append(lines)
+
+    return region_lines
 
 
 def _runs(flags: list[bool]) -> list[tuple[int, int]]:
@@ -586,10 +673,24 @@ def extract_toll_ocr(image_bytes: bytes) -> dict:
     analyzed: list[tuple[str, list[dict]]] = []
 
     if separators:
-        # For the recommended report-print capture, structural separators are
-        # trusted. Re-reading the whole image was the main source of latency.
+        # Report-print fast path: one Tesseract process for the whole image,
+        # then partition OCR tokens into receipt regions by x-position.
         separator_regions = _regions_from_separators(image, separators)
-        analyzed.append(("separator", _analyze_plan(separator_regions)))
+        shared_lines = _ocr_separator_regions_once(image, separators)
+
+        if len(shared_lines) == len(separator_regions):
+            separator_results = [
+                _analyze_with_initial_lines(
+                    region,
+                    lines,
+                    initial_name="shared_psm11",
+                )
+                for region, lines in zip(separator_regions, shared_lines)
+            ]
+        else:
+            separator_results = _analyze_plan(separator_regions)
+
+        analyzed.append(("separator_fast", separator_results))
     else:
         analyzed.append(("whole", _analyze_plan([image])))
 
