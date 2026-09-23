@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -14,6 +15,7 @@ API_BASE = "https://www.opinet.co.kr/api"
 RECENT_AREA_ENDPOINT = "areaAvgRecentPrice.do"
 DATE_AREA_ENDPOINT = "dateAreaAvgRecentPrice.do"
 AREA_CODE_ENDPOINT = "areaCode.do"
+VALIDATED_PRICE_NAMESPACE = "opinet_validated_price_v1"
 
 PRODUCT_CODES = {
     "gasoline": "B027",
@@ -41,6 +43,8 @@ PROVINCE_ALIASES = {
     "세종특별자치시": "세종", "세종": "세종",
 }
 
+_PREFERRED_AUTH_NAME: str | None = None
+
 
 def _rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     oil = payload.get("RESULT", {}).get("OIL", [])
@@ -63,6 +67,10 @@ def _province_short(name: str) -> str:
         if long_name in name:
             return short_name
     return name
+
+
+def _seoul_today() -> date:
+    return datetime.now(ZoneInfo("Asia/Seoul")).date()
 
 
 async def _request_once(
@@ -90,6 +98,8 @@ async def _request_once(
 
 async def check_opinet_api_status() -> dict[str, Any]:
     """Validate the configured API key without ever returning the secret value."""
+    global _PREFERRED_AUTH_NAME
+
     if not OPINET_API_KEY:
         return {
             "configured": False,
@@ -100,10 +110,16 @@ async def check_opinet_api_status() -> dict[str, Any]:
         }
 
     attempts: list[str] = []
-    for auth_name in ("certkey", "code"):
+    auth_names = (
+        (_PREFERRED_AUTH_NAME,)
+        if _PREFERRED_AUTH_NAME
+        else ("certkey", "code")
+    )
+    for auth_name in auth_names:
         try:
             rows, payload = await _request_once(AREA_CODE_ENDPOINT, auth_name)
             if rows:
+                _PREFERRED_AUTH_NAME = auth_name
                 sample_names = [
                     _clean(row.get("AREA_NM"))
                     for row in rows[:5]
@@ -142,20 +158,27 @@ async def check_opinet_api_status() -> dict[str, Any]:
 
 
 async def _request(endpoint: str, **extra: str) -> list[dict[str, Any]]:
+    global _PREFERRED_AUTH_NAME
+
     if not OPINET_API_KEY:
         raise RuntimeError("OPINET_API_KEY가 설정되지 않았습니다.")
 
-    # OPINET keys differ by issuance/API generation. The diagnostic endpoint
-    # proved that this deployment's key authenticates with `code`, while some
-    # current documentation/examples use `certkey`. Try both safely for every
-    # endpoint so the real lookup path matches the validated credential mode.
+    # Once an auth parameter has succeeded in this process, reuse only that
+    # parameter. This prevents one logical lookup from consuming two OPINET
+    # requests on deployments whose key authenticates with only one mode.
+    auth_names = (
+        (_PREFERRED_AUTH_NAME,)
+        if _PREFERRED_AUTH_NAME
+        else ("certkey", "code")
+    )
     last_payload: dict[str, Any] = {}
     attempt_notes: list[str] = []
 
-    for auth_name in ("certkey", "code"):
+    for auth_name in auth_names:
         try:
             rows, payload = await _request_once(endpoint, auth_name, **extra)
             if rows:
+                _PREFERRED_AUTH_NAME = auth_name
                 return rows
             last_payload = payload or last_payload
             result = payload.get("RESULT") if isinstance(payload, dict) else None
@@ -192,38 +215,71 @@ def _name_matches(api_name: str, target: str) -> bool:
     return target in api_name or api_name in target
 
 
+async def _resolve_province_code(province_name: str) -> str:
+    province_short = _province_short(province_name)
+
+    async def factory() -> str:
+        province_rows = await _request(AREA_CODE_ENDPOINT)
+        for row in province_rows:
+            if _name_matches(row.get("AREA_NM", ""), province_short):
+                province_code = _clean(row.get("AREA_CD"))
+                if province_code:
+                    return province_code
+        raise RuntimeError(f"오피넷 지역코드에서 {province_name}을(를) 찾지 못했습니다.")
+
+    value, _ = await cache.get_or_create(
+        "opinet_province_code_v1",
+        province_short,
+        factory,
+        ttl_seconds=None,
+    )
+    return str(value)
+
+
+async def _resolve_sigungu_code_map(province_code: str) -> dict[str, str]:
+    async def factory() -> dict[str, str]:
+        rows = await _request(AREA_CODE_ENDPOINT, area=province_code)
+        mapping: dict[str, str] = {}
+        for row in rows:
+            area_name = _clean(row.get("AREA_NM"))
+            area_code = _clean(row.get("AREA_CD"))
+            if area_name and area_code:
+                mapping[area_name] = area_code
+        if not mapping:
+            raise RuntimeError("오피넷 시군구 지역코드 목록이 비어 있습니다.")
+        return mapping
+
+    value, _ = await cache.get_or_create(
+        "opinet_sigungu_codes_v1",
+        province_code,
+        factory,
+        ttl_seconds=None,
+    )
+    return {str(name): str(code) for name, code in dict(value).items()}
+
+
 async def _resolve_area_code(province_name: str, sigungu_name: str) -> str:
     cache_key = f"{_province_short(province_name)}|{_clean(sigungu_name)}"
 
     async def factory() -> str:
         province_short = _province_short(province_name)
-        province_rows = await _request(AREA_CODE_ENDPOINT)
-        province_code = None
-        for row in province_rows:
-            if _name_matches(row.get("AREA_NM", ""), province_short):
-                province_code = _clean(row.get("AREA_CD"))
-                break
-        if not province_code:
-            raise RuntimeError(f"오피넷 지역코드에서 {province_name}을(를) 찾지 못했습니다.")
+        province_code = await _resolve_province_code(province_name)
 
         # Sejong has no lower sigungu oil-price level in OPINET.
         # Use the Sejong province code itself for historical average prices.
         if province_short == "세종":
             return province_code
 
-        sigungu_rows = await _request(AREA_CODE_ENDPOINT, area=province_code)
+        sigungu_codes = await _resolve_sigungu_code_map(province_code)
         targets = [_clean(sigungu_name)]
         if " " in targets[0]:
             targets.append(targets[0].split(" ", 1)[0])
 
-        for row in sigungu_rows:
-            area_name = _clean(row.get("AREA_NM", ""))
+        for area_name, area_code in sigungu_codes.items():
             if any(_name_matches(area_name, target) for target in targets):
-                area_code = _clean(row.get("AREA_CD"))
-                if area_code:
-                    return area_code
+                return area_code
 
-        sample = ", ".join(_clean(row.get("AREA_NM", "")) for row in sigungu_rows[:8])
+        sample = ", ".join(list(sigungu_codes.keys())[:8])
         raise RuntimeError(
             f"오피넷 지역코드에서 {sigungu_name}을(를) 찾지 못했습니다. 조회 지역 예: {sample}"
         )
@@ -241,6 +297,56 @@ def _row_date(row: dict[str, Any]) -> str:
     return _clean(row.get("DATE") or row.get("TRADE_DT"))
 
 
+def _validated_price_key(api_date: str, area_code: str, product_code: str) -> str:
+    return f"{api_date}|{area_code}|{product_code}"
+
+
+async def save_validated_historical_area_price(
+    api_result: dict[str, Any],
+    *,
+    web_price: float,
+    province_name: str,
+    sigungu_name: str,
+    vehicle_type: str,
+    web_source_url: str | None = None,
+) -> dict[str, Any]:
+    api_price = float(api_result["price"])
+    web_price = float(web_price)
+    if abs(api_price - web_price) > 0.011:
+        raise RuntimeError(
+            "오피넷 API 가격과 웹조회 가격이 일치하지 않아 검증 캐시에 저장하지 않았습니다. "
+            f"API {api_price:,.2f}원 / 웹 {web_price:,.2f}원"
+        )
+
+    api_date = str(api_result["api_date"])
+    area_code = str(api_result["area_code"])
+    product_code = str(api_result["product_code"])
+    value = {
+        "price": api_price,
+        "source": "한국석유공사 오피넷 API · 웹 검증 완료",
+        "source_url": api_result.get("source_url"),
+        "area_code": area_code,
+        "api_date": api_date,
+        "endpoint": api_result.get("endpoint"),
+        "product_code": product_code,
+        "vehicle_type": vehicle_type,
+        "province": province_name,
+        "sigungu": sigungu_name,
+        "validated": True,
+        "validation_source": "opinet_web",
+        "validation_price": web_price,
+        "validation_source_url": web_source_url,
+        "validated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await cache.set(
+        VALIDATED_PRICE_NAMESPACE,
+        _validated_price_key(api_date, area_code, product_code),
+        value,
+        ttl_seconds=None,
+    )
+    return value
+
+
 async def get_historical_area_price(
     travel_date: date,
     province_name: str,
@@ -252,13 +358,15 @@ async def get_historical_area_price(
 
     area_code = await _resolve_area_code(province_name, sigungu_name)
     product_code = PRODUCT_CODES[vehicle_type]
-    target_key = f"{travel_date.isoformat()}|{area_code}|{product_code}"
+    target_key = _validated_price_key(travel_date.isoformat(), area_code, product_code)
 
-    cached = await cache.get("opinet_api_price", target_key)
-    if cached is not None:
+    # Only values that were cross-checked against OPINET's web result are
+    # eligible for permanent reuse. Legacy/raw cache entries are ignored.
+    cached = await cache.get(VALIDATED_PRICE_NAMESPACE, target_key)
+    if isinstance(cached, dict) and cached.get("validated") is True:
         return {**cached, "cache_hit": True}
 
-    today = date.today()
+    today = _seoul_today()
     if today - timedelta(days=7) <= travel_date < today:
         endpoint = RECENT_AREA_ENDPOINT
     else:
@@ -293,13 +401,10 @@ async def get_historical_area_price(
                 "area_code": area_code,
                 "api_date": row_iso,
                 "endpoint": endpoint,
+                "product_code": product_code,
+                "vehicle_type": vehicle_type,
+                "validated": False,
             }
-            await cache.set(
-                "opinet_api_price",
-                f"{row_iso}|{area_code}|{product_code}",
-                value,
-                ttl_seconds=None,
-            )
             if row_iso == travel_date.isoformat():
                 target_value = value
         except (TypeError, ValueError):
@@ -311,4 +416,7 @@ async def get_historical_area_price(
             f"오피넷 {endpoint} 응답에 {travel_date.isoformat()} 가격이 없습니다. 반환일자: {available}"
         )
 
+    # The raw API response is intentionally not persisted. price_service will
+    # compare it with OPINET's web table first, then save it via
+    # save_validated_historical_area_price().
     return {**target_value, "cache_hit": False}
