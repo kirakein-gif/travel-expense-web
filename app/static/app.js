@@ -570,7 +570,7 @@ $("distanceButton").addEventListener("click",async()=>{
     if(!r.ok)throw new Error(data.detail||"거리 계산 실패"); lastDistance=data;
     $("resolved_origin").textContent=placeText(data.resolved_origin_name,data.resolved_origin_address);
     $("resolved_destination").textContent=placeText(data.resolved_destination_name,data.resolved_destination_address);
-    $("one_way_distance").textContent=fmt(data.one_way_distance_km)+" km";$("distance_source").textContent=data.distance_source+(data.distance_cache_hit?" · 캐시":"");
+    $("one_way_distance").textContent=fmt(data.one_way_distance_km)+" km";$("distance_source").textContent=data.distance_source;
     $("destination_code").textContent=data.destination_support_office||data.destination_code||data.sigungu||"-";
     const originLabel=data.resolved_origin_name||payload.origin;
     const destinationLabel=data.resolved_destination_name||payload.destination;
@@ -619,12 +619,12 @@ $("calculateButton").addEventListener("click",async()=>{
     $("summary_meal").textContent=fmt(data.meal_allowance)+" 원";
     $("summary_misc").textContent=fmt(Number(data.toll_fee||0)+Number(data.parking_fee||0)+Number(data.lodging_fee||0))+" 원";
     $("fare_summary").textContent=days()+"일 · "+tripTypeLabel()+" · 자동차운임 "+(data.estimated_transport_cost==null?"-":fmt(data.estimated_transport_cost)+"원")+" · 일비 "+fmt(data.daily_allowance)+"원 · 식비 "+fmt(data.meal_allowance)+"원";
-    $("source").textContent=(data.price_source||"-")+(data.price_cache_hit?" · 캐시":"");
+    $("source").textContent=data.price_source||"-";
     const spec=currentVehicleSpec(),canEvidence=spec.evidence&&data.energy_price!=null&&!payload.public_vehicle&&data.evidence_status!=="manual_price";
     if(canEvidence){
       lastEvidencePayload={travel_date:payload.travel_date,vehicle_type:spec.evidence,province:lastDistance.province,sigungu:lastDistance.sigungu,expected_price:data.energy_price};
       $("evidenceButton").disabled=false;
-      $("evidence").textContent=prefetchedEvidence&&evidencePayloadMatches(prefetchedEvidence.evidencePayload,lastEvidencePayload)?"verified_web_capture · 임시 캐시":"API 가격 확인 · 증빙 준비 중/대기";
+      $("evidence").textContent=prefetchedEvidence&&evidencePayloadMatches(prefetchedEvidence.evidencePayload,lastEvidencePayload)?"오피넷 증빙 준비 완료":"오피넷 증빙 준비 중";
     }else{
       lastEvidencePayload=null;$("evidenceButton").disabled=true;
       if(data.evidence_status==="official_ev_rate") $("evidence").textContent="무공해차 누리집 기준단가 자동 적용";

@@ -9,6 +9,11 @@ from typing import Any, Awaitable, Callable
 
 CACHE_BACKEND = os.getenv("CACHE_BACKEND", "memory").lower()
 logger = logging.getLogger(__name__)
+diag_logger = logging.getLogger("uvicorn.error")
+
+
+def _is_opinet_namespace(namespace: str) -> bool:
+    return namespace == "fuel_price" or namespace.startswith("opinet_")
 
 
 class CacheService:
@@ -39,6 +44,8 @@ class CacheService:
         if cached:
             expires_at, value = cached
             if expires_at is None or expires_at > time.time():
+                if _is_opinet_namespace(namespace):
+                    diag_logger.info("[OPINET] MEMORY_HIT namespace=%s key=%s", namespace, key)
                 return value
             self._memory.pop(memory_key, None)
 
@@ -52,7 +59,12 @@ class CacheService:
             logger.exception("Firestore cache read failed; continuing with memory cache")
             return None
         if not snap.exists:
+            if _is_opinet_namespace(namespace):
+                diag_logger.info("[OPINET] FIRESTORE_MISS namespace=%s key=%s", namespace, key)
             return None
+
+        if _is_opinet_namespace(namespace):
+            diag_logger.info("[OPINET] FIRESTORE_HIT namespace=%s key=%s", namespace, key)
 
         data = snap.to_dict() or {}
         expires_at = data.get("expires_at")
@@ -78,6 +90,8 @@ class CacheService:
                 "expires_at": expires_at,
                 "updated_at": time.time(),
             })
+            if _is_opinet_namespace(namespace):
+                diag_logger.info("[OPINET] FIRESTORE_WRITE namespace=%s key=%s", namespace, key)
         except Exception:
             logger.exception("Firestore cache write failed; value retained in memory cache only")
 

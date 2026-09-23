@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+import logging
 from zoneinfo import ZoneInfo
 
 from app.browser.opinet_browser import (
@@ -16,6 +17,8 @@ from app.services.opinet_api_service import (
 )
 from app.services.ev_rate_service import get_electric_rate
 from app.services.travel_policy import get_vehicle_spec
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def _seoul_today() -> date:
@@ -52,7 +55,7 @@ def _find_sigungu_price(prices: dict[str, float], sigungu_name: str) -> float:
 
     preview = ", ".join(list(prices.keys())[:12]) or "(비어 있음)"
     raise RuntimeError(
-        f"오피넷 캐시 가격표에서 {sigungu_name} 가격을 찾지 못했습니다. "
+        f"오피넷 조회 가격표에서 {sigungu_name} 가격을 찾지 못했습니다. "
         f"추출된 지역: {preview}"
     )
 
@@ -119,18 +122,37 @@ async def _validate_api_price(
     except Exception as exc:
         raise RuntimeError(
             "오피넷 API 가격은 조회했지만 웹페이지 대조 검증에 실패했습니다. "
-            "검증되지 않은 값은 공유 캐시에 저장하지 않습니다. "
+            "검증되지 않은 값은 사용하지 않습니다. "
             f"({exc})"
         ) from exc
 
     api_price = float(api_result["price"])
     web_price = float(web_result["price"])
     if abs(api_price - web_price) > 0.011:
+        logger.warning(
+            "[OPINET] WEB_VALIDATION_MISMATCH date=%s province=%s sigungu=%s vehicle=%s api=%.2f web=%.2f",
+            travel_date.isoformat(),
+            province_name,
+            sigungu_name,
+            lookup_vehicle_type,
+            api_price,
+            web_price,
+        )
         raise RuntimeError(
             "오피넷 API 가격과 웹페이지 가격이 일치하지 않습니다. "
-            "검증되지 않은 값은 사용하거나 공유 캐시에 저장하지 않습니다. "
+            "검증되지 않은 값은 사용하지 않습니다. "
             f"API {api_price:,.2f}원 / 웹 {web_price:,.2f}원"
         )
+
+    logger.info(
+        "[OPINET] WEB_VALIDATION_OK date=%s province=%s sigungu=%s vehicle=%s api=%.2f web=%.2f",
+        travel_date.isoformat(),
+        province_name,
+        sigungu_name,
+        lookup_vehicle_type,
+        api_price,
+        web_price,
+    )
 
     validated = await save_validated_historical_area_price(
         api_result,
@@ -175,11 +197,7 @@ async def get_energy_price(
                 raise RuntimeError(f"오피넷 유가 조회/검증 실패: {exc}") from exc
 
             sejong_scope = "세종" in (province_name or "")
-            source = (
-                "한국석유공사 오피넷 검증 캐시"
-                if api_result.get("cache_hit")
-                else "한국석유공사 오피넷 API · 웹 검증 완료"
-            )
+            source = "한국석유공사 오피넷 · API/웹 검증 완료"
             if sejong_scope:
                 source += " · 세종시 평균"
             return {

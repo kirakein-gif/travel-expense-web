@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
@@ -9,6 +10,8 @@ from app.browser.opinet_browser import (
     normalize_sigungu,
     query_opinet_region_prices,
 )
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def _compact(value: str) -> str:
@@ -36,6 +39,13 @@ async def generate_opinet_evidence(
         raise ValueError("오피넷 증빙 생성은 휘발유·경유·LPG만 지원합니다.")
 
     target_sigungu = normalize_opinet_sigungu(province_name, sigungu_name)
+    logger.info(
+        "[OPINET] EVIDENCE_GENERATE_START date=%s province=%s sigungu=%s vehicle=%s",
+        travel_date,
+        province_name,
+        target_sigungu,
+        vehicle_type,
+    )
 
     result = await query_opinet_region_prices(
         travel_date=travel_date,
@@ -84,4 +94,12 @@ async def generate_opinet_evidence(
     path = Path(result.evidence_path)
     if not path.exists():
         raise RuntimeError("오피넷 증빙 이미지 파일이 생성되지 않았습니다.")
+    logger.info(
+        "[OPINET] EVIDENCE_GENERATE_DONE date=%s province=%s sigungu=%s vehicle=%s price=%.2f",
+        travel_date,
+        province_name,
+        target_sigungu,
+        vehicle_type,
+        matched_price,
+    )
     return str(path)
