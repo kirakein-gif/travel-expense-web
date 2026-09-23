@@ -158,3 +158,48 @@ def test_separator_detection_does_not_split_single_receipt_border():
     draw.rectangle((130, 180, 570, 230), outline="black", width=3)
     separators = _find_vertical_separators(image)
     assert separators == []
+
+
+
+def test_report_print_sparse_lines_confirm_left_receipt():
+    result = analyze_receipt_lines(
+        [
+            "1 종",
+            "1,500%",
+            "KEC",
+            "73002",
+            "CNE",
+            "2008",
+            "공 급 가 액 : 1.482 원 부가세 : 18 원",
+        ]
+    )
+    assert result["sources"]["A"] == 1500
+    assert result["sources"]["B"] == 1500
+    assert result["amount"] == 1500
+    assert result["status"] == "confirmed"
+
+
+def test_report_print_sparse_lines_confirm_right_receipt():
+    result = analyze_receipt_lines(
+        [
+            "1 종",
+            "2,400원",
+            "CNE",
+            "24002",
+            "공 급 가 액 : 2.182 원 부가세 : 218 원",
+        ]
+    )
+    assert result["sources"]["A"] == 2400
+    assert result["sources"]["B"] == 2400
+    assert result["sources"]["C"] == 2400
+    assert result["amount"] == 2400
+    assert result["status"] == "confirmed"
+
+
+def test_report_print_colon_thousands_separator_is_normalized():
+    result = analyze_receipt_lines(
+        ["1 종", "2:400원", "공 급 가 액 : 2.182 원 부가세 : 218 원"]
+    )
+    assert result["sources"]["A"] == 2400
+    assert result["sources"]["B"] == 2400
+    assert result["status"] == "confirmed"

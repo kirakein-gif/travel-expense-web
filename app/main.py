@@ -15,7 +15,7 @@ from app.services.access_service import (
     verify_session_token,
 )
 
-APP_VERSION = "1.29.0"
+APP_VERSION = "1.29.1"
 
 logger = logging.getLogger("uvicorn.error")
 

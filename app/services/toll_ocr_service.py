@@ -4,6 +4,8 @@ import io
 import logging
 import re
 import unicodedata
+import time
+from bisect import bisect_right
 from collections import Counter, defaultdict
 
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps, ImageStat
@@ -12,7 +14,7 @@ from pytesseract import Output
 
 logger = logging.getLogger("uvicorn.error")
 
-_AMOUNT_TOKEN = r"([0-9]{1,3}(?:[\s,.][0-9]{3})+(?:[48])?|[0-9]{2,6})"
+_AMOUNT_TOKEN = r"([0-9]{1,3}(?:[\s,.:][0-9]{3})+(?:[48])?|[0-9]{2,6})"
 _VEHICLE_RE = re.compile(r"([1-6])\s*종")
 _SUPPLY_RE = re.compile(
     rf"공\s*급\s*가\s*액[^0-9]{{0,14}}{_AMOUNT_TOKEN}\s*원?"
@@ -27,6 +29,8 @@ _SPLIT_WORD_RE = re.compile(
     rf"\b(KEC|CNE)\b[^0-9]{{0,18}}{_AMOUNT_TOKEN}\s*원?",
     re.IGNORECASE,
 )
+_ANY_AMOUNT_RE = re.compile(_AMOUNT_TOKEN)
+_OPERATOR_RE = re.compile(r"\b(KEC|CNE)\b", re.IGNORECASE)
 
 
 def _money(value: str | None, *, cleanup_won_glyph: bool = False) -> int | None:
@@ -35,10 +39,11 @@ def _money(value: str | None, *, cleanup_won_glyph: bool = False) -> int | None:
     raw = (
         value.replace(",", "")
         .replace(".", "")
+        .replace(":", "")
         .replace(" ", "")
         .replace("\u00a0", "")
     )
-    if cleanup_won_glyph and len(raw) >= 4 and raw[-1] in {"4", "8"}:
+    if cleanup_won_glyph and len(raw) >= 4 and raw[-1] in {"2", "4", "8"}:
         trimmed = raw[:-1]
         if trimmed.isdigit() and int(trimmed) >= 100 and int(trimmed) % 10 == 0:
             raw = trimmed
@@ -53,6 +58,8 @@ def _money(value: str | None, *, cleanup_won_glyph: bool = False) -> int | None:
 def _normalize_line(line: str) -> str:
     value = unicodedata.normalize("NFKC", line or "")
     value = value.replace("：", ":").replace("₩", "원")
+    value = re.sub(r"(?<=\d)[,.:]\s*[,.](?=\d{3}(?:\D|$))", ",", value)
+    value = re.sub(r"(?<=\d):(?=\d{3}(?:\D|$))", ",", value)
     # Restrict OCR-token correction to isolated operator words.
     value = re.sub(r"\bK[E3]C\b", "KEC", value, flags=re.IGNORECASE)
     value = re.sub(r"\bCN[E3]\b", "CNE", value, flags=re.IGNORECASE)
@@ -74,29 +81,64 @@ def _source_a(text: str) -> tuple[int | None, dict]:
 
 
 def _source_b(lines: list[str]) -> tuple[int | None, int | None]:
-    for line in lines:
+    for index, line in enumerate(lines):
         match = _CLASS_TOTAL_RE.search(line)
-        if not match:
+        if match:
+            vehicle_class = int(match.group(1))
+            amount = _money(match.group(2), cleanup_won_glyph=True)
+            if amount is not None:
+                return amount, vehicle_class
+
+        # Sparse-text OCR often separates "1종" and "2,400원" into
+        # neighboring lines. Pair only with the next two lines.
+        vehicle_match = _VEHICLE_RE.search(line)
+        if not vehicle_match:
             continue
-        vehicle_class = int(match.group(1))
-        amount = _money(match.group(2), cleanup_won_glyph=True)
-        if amount is not None:
-            return amount, vehicle_class
+
+        vehicle_class = int(vehicle_match.group(1))
+        candidates = [line[vehicle_match.end():]] + lines[index + 1 : index + 3]
+        for candidate in candidates:
+            amount_match = _ANY_AMOUNT_RE.search(candidate)
+            if not amount_match:
+                continue
+            amount = _money(amount_match.group(1), cleanup_won_glyph=True)
+            if amount is not None:
+                return amount, vehicle_class
+
     return None, None
 
 
 def _source_c(lines: list[str]) -> tuple[int | None, list[dict]]:
     parts: list[dict] = []
-    for line in lines:
+    for index, line in enumerate(lines):
+        matched_on_line = False
         for match in _SPLIT_WORD_RE.finditer(line):
             amount = _money(match.group(2), cleanup_won_glyph=True)
             if amount is not None:
                 parts.append({"operator": match.group(1).upper(), "amount": amount})
+                matched_on_line = True
+
+        if matched_on_line:
+            continue
+
+        # PSM 11 can emit KEC/CNE and its amount on separate lines.
+        operator_match = _OPERATOR_RE.search(line)
+        if not operator_match:
+            continue
+        for candidate in lines[index + 1 : index + 3]:
+            amount_match = _ANY_AMOUNT_RE.search(candidate)
+            if not amount_match:
+                continue
+            amount = _money(amount_match.group(1), cleanup_won_glyph=True)
+            if amount is not None:
+                parts.append(
+                    {"operator": operator_match.group(1).upper(), "amount": amount}
+                )
+                break
+
     if not parts:
         return None, []
 
-    # OCR can duplicate the same line in sparse-text mode. Keep one amount per
-    # operator+amount pair so C does not accidentally double-count it.
     unique: list[dict] = []
     seen: set[tuple[str, int]] = set()
     for part in parts:
@@ -105,6 +147,7 @@ def _source_c(lines: list[str]) -> tuple[int | None, list[dict]]:
             continue
         seen.add(key)
         unique.append(part)
+
     return sum(part["amount"] for part in unique), unique
 
 
@@ -183,8 +226,8 @@ def analyze_receipt_lines(lines: list[str]) -> dict:
 def _prepare_base_image(image: Image.Image) -> Image.Image:
     image = ImageOps.exif_transpose(image).convert("RGB")
     max_side = max(image.width, image.height)
-    if max_side < 2200:
-        scale = min(2.5, 2200 / max(max_side, 1))
+    if max_side < 1800:
+        scale = min(2.2, 1800 / max(max_side, 1))
         image = image.resize(
             (max(1, int(image.width * scale)), max(1, int(image.height * scale))),
             Image.Resampling.LANCZOS,
@@ -369,30 +412,112 @@ def _merge_pass_results(pass_results: list[tuple[str, list[str], dict]]) -> dict
     }
 
 
-def _analyze_region(image: Image.Image) -> dict:
-    passes: list[tuple[str, list[str], dict]] = []
-
-    def run(name: str, *, psm: int, binary: bool = False) -> dict:
-        lines = _ocr_variant(image, psm=psm, binary=binary)
-        result = analyze_receipt_lines(lines)
-        passes.append((name, lines, result))
-        return result
-
-    first = run("gray_psm6", psm=6)
-    if first["status"] == "confirmed":
+def _analyze_with_initial_lines(
+    image: Image.Image,
+    initial_lines: list[str],
+    *,
+    initial_name: str,
+) -> dict:
+    initial_result = analyze_receipt_lines(initial_lines)
+    passes = [(initial_name, initial_lines, initial_result)]
+    if initial_result["status"] == "confirmed":
         merged = _merge_pass_results(passes)
-        merged["note"] = "기본 판독 · 두 개 이상 패턴 일치"
+        merged["note"] = "보고서 인쇄 빠른 판독 · 두 개 이상 패턴 일치"
         return merged
 
-    second = run("gray_psm11", psm=11)
-    merged = _merge_pass_results(passes)
-    if merged["status"] == "confirmed":
-        return merged
-
-    # Thresholded pass is more expensive and can lose thin glyphs, so only use
-    # it when the two grayscale layouts did not already confirm a value.
-    run("binary_psm6", psm=6, binary=True)
+    # Only a receipt that failed the shared sparse-text pass gets one extra
+    # OCR process. PSM 4 is effective for the compact receipt row layout.
+    fallback_lines = _ocr_variant(image, psm=4, binary=False)
+    fallback_result = analyze_receipt_lines(fallback_lines)
+    passes.append(("gray_psm4", fallback_lines, fallback_result))
     return _merge_pass_results(passes)
+
+
+def _analyze_region(image: Image.Image) -> dict:
+    initial_lines = _ocr_variant(image, psm=11, binary=False)
+    return _analyze_with_initial_lines(
+        image,
+        initial_lines,
+        initial_name="gray_psm11",
+    )
+
+
+def _ocr_separator_regions_once(
+    image: Image.Image,
+    separators: list[int],
+) -> list[list[str]]:
+    """Run one sparse-text OCR pass and partition tokens by x-position."""
+    prepared = _prepare_base_image(image)
+    gray = ImageOps.autocontrast(ImageOps.grayscale(prepared))
+    mean = ImageStat.Stat(gray).mean[0]
+    if mean < 105:
+        gray = ImageOps.invert(gray)
+        gray = ImageOps.autocontrast(gray)
+    gray = ImageEnhance.Contrast(gray).enhance(1.12)
+    gray = gray.filter(ImageFilter.UnsharpMask(radius=1.0, percent=135, threshold=3))
+
+    scale_x = gray.width / max(image.width, 1)
+    scaled_separators = [separator * scale_x for separator in separators]
+    config = "--oem 3 --psm 11 -c preserve_interword_spaces=1"
+
+    try:
+        data = pytesseract.image_to_data(
+            gray,
+            lang="kor+eng",
+            config=config,
+            output_type=Output.DICT,
+        )
+    except pytesseract.TesseractError:
+        data = pytesseract.image_to_data(
+            gray,
+            lang="eng",
+            config=config,
+            output_type=Output.DICT,
+        )
+
+    region_count = len(separators) + 1
+    grouped: list[dict[tuple[int, int, int], list[tuple[int, str]]]] = [
+        defaultdict(list) for _ in range(region_count)
+    ]
+
+    total = len(data.get("text", []))
+    block_nums = data.get("block_num", [0] * total)
+    par_nums = data.get("par_num", [0] * total)
+    line_nums = data.get("line_num", [0] * total)
+    lefts = data.get("left", [0] * total)
+    widths = data.get("width", [0] * total)
+    confs = data.get("conf", ["-1"] * total)
+
+    for i in range(total):
+        token = (data["text"][i] or "").strip()
+        if not token:
+            continue
+        try:
+            confidence = float(confs[i])
+        except (TypeError, ValueError):
+            confidence = -1
+        if 0 <= confidence < 18:
+            continue
+
+        center_x = float(lefts[i]) + float(widths[i]) / 2
+        region_index = bisect_right(scaled_separators, center_x)
+        region_index = min(max(region_index, 0), region_count - 1)
+        key = (int(block_nums[i]), int(par_nums[i]), int(line_nums[i]))
+        grouped[region_index][key].append((int(lefts[i]), token))
+
+    region_lines: list[list[str]] = []
+    for region in grouped:
+        lines: list[str] = []
+        for key in sorted(region):
+            line = " ".join(
+                token
+                for _, token in sorted(region[key], key=lambda item: item[0])
+            ).strip()
+            if line:
+                lines.append(line)
+        region_lines.append(lines)
+
+    return region_lines
 
 
 def _runs(flags: list[bool]) -> list[tuple[int, int]]:
@@ -531,6 +656,7 @@ def _analyze_plan(regions: list[Image.Image]) -> list[dict]:
 
 
 def extract_toll_ocr(image_bytes: bytes) -> dict:
+    started_at = time.perf_counter()
     try:
         image = Image.open(io.BytesIO(image_bytes))
         image.load()
@@ -547,18 +673,24 @@ def extract_toll_ocr(image_bytes: bytes) -> dict:
     analyzed: list[tuple[str, list[dict]]] = []
 
     if separators:
+        # Report-print fast path: one Tesseract process for the whole image,
+        # then partition OCR tokens into receipt regions by x-position.
         separator_regions = _regions_from_separators(image, separators)
-        separator_results = _analyze_plan(separator_regions)
-        analyzed.append(("separator", separator_results))
+        shared_lines = _ocr_separator_regions_once(image, separators)
 
-        # If every detected receipt is already confirmed, do not spend another
-        # Tesseract pass on the whole image. Otherwise compare against the whole
-        # image in case a receipt's own table border was mistaken for a divider.
-        separator_reliable = bool(separator_results) and all(
-            result.get("status") == "confirmed" for result in separator_results
-        )
-        if not separator_reliable:
-            analyzed.append(("whole", _analyze_plan([image])))
+        if len(shared_lines) == len(separator_regions):
+            separator_results = [
+                _analyze_with_initial_lines(
+                    region,
+                    lines,
+                    initial_name="shared_psm11",
+                )
+                for region, lines in zip(separator_regions, shared_lines)
+            ]
+        else:
+            separator_results = _analyze_plan(separator_regions)
+
+        analyzed.append(("separator_fast", separator_results))
     else:
         analyzed.append(("whole", _analyze_plan([image])))
 
@@ -604,14 +736,16 @@ def extract_toll_ocr(image_bytes: bytes) -> dict:
     )
     review_count = len(receipts) - confirmed_count
 
+    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
     logger.info(
-        "[TOLL_OCR] segmentation=%s separators=%s receipts=%s recognized=%s confirmed=%s total=%s",
+        "[TOLL_OCR] segmentation=%s separators=%s receipts=%s recognized=%s confirmed=%s total=%s elapsed_ms=%s",
         best_name,
         separators,
         len(receipts),
         len(recognized),
         confirmed_count,
         total_amount,
+        elapsed_ms,
     )
 
     return {
