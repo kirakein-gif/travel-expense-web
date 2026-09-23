@@ -79,29 +79,64 @@ def _source_a(text: str) -> tuple[int | None, dict]:
 
 
 def _source_b(lines: list[str]) -> tuple[int | None, int | None]:
-    for line in lines:
+    for index, line in enumerate(lines):
         match = _CLASS_TOTAL_RE.search(line)
-        if not match:
+        if match:
+            vehicle_class = int(match.group(1))
+            amount = _money(match.group(2), cleanup_won_glyph=True)
+            if amount is not None:
+                return amount, vehicle_class
+
+        # Sparse-text OCR often separates "1종" and "2,400원" into
+        # neighboring lines. Pair only with the next two lines.
+        vehicle_match = _VEHICLE_RE.search(line)
+        if not vehicle_match:
             continue
-        vehicle_class = int(match.group(1))
-        amount = _money(match.group(2), cleanup_won_glyph=True)
-        if amount is not None:
-            return amount, vehicle_class
+
+        vehicle_class = int(vehicle_match.group(1))
+        candidates = [line[vehicle_match.end():]] + lines[index + 1 : index + 3]
+        for candidate in candidates:
+            amount_match = _ANY_AMOUNT_RE.search(candidate)
+            if not amount_match:
+                continue
+            amount = _money(amount_match.group(1), cleanup_won_glyph=True)
+            if amount is not None:
+                return amount, vehicle_class
+
     return None, None
 
 
 def _source_c(lines: list[str]) -> tuple[int | None, list[dict]]:
     parts: list[dict] = []
-    for line in lines:
+    for index, line in enumerate(lines):
+        matched_on_line = False
         for match in _SPLIT_WORD_RE.finditer(line):
             amount = _money(match.group(2), cleanup_won_glyph=True)
             if amount is not None:
                 parts.append({"operator": match.group(1).upper(), "amount": amount})
+                matched_on_line = True
+
+        if matched_on_line:
+            continue
+
+        # PSM 11 can emit KEC/CNE and its amount on separate lines.
+        operator_match = _OPERATOR_RE.search(line)
+        if not operator_match:
+            continue
+        for candidate in lines[index + 1 : index + 3]:
+            amount_match = _ANY_AMOUNT_RE.search(candidate)
+            if not amount_match:
+                continue
+            amount = _money(amount_match.group(1), cleanup_won_glyph=True)
+            if amount is not None:
+                parts.append(
+                    {"operator": operator_match.group(1).upper(), "amount": amount}
+                )
+                break
+
     if not parts:
         return None, []
 
-    # OCR can duplicate the same line in sparse-text mode. Keep one amount per
-    # operator+amount pair so C does not accidentally double-count it.
     unique: list[dict] = []
     seen: set[tuple[str, int]] = set()
     for part in parts:
@@ -110,6 +145,7 @@ def _source_c(lines: list[str]) -> tuple[int | None, list[dict]]:
             continue
         seen.add(key)
         unique.append(part)
+
     return sum(part["amount"] for part in unique), unique
 
 
