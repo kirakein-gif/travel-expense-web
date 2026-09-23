@@ -10,12 +10,11 @@ from app.routes.travel import router as travel_router
 from app.services.access_service import (
     OFFICIAL_GUIDE_URL,
     create_session_token,
-    is_allowed_referer,
     owner_key_matches,
     verify_session_token,
 )
 
-APP_VERSION = "1.28.0"
+APP_VERSION = "1.28.1"
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -23,7 +22,7 @@ app = FastAPI(title="딸깍 여비정산서", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
-_PUBLIC_PATHS = {"/enter", "/owner", "/health"}
+_PUBLIC_PATHS = {"/enter", "/owner", "/health", "/favicon.ico"}
 
 
 def _has_access(request: Request) -> bool:
@@ -87,11 +86,6 @@ async def official_entry(request: Request):
     if not ACCESS_CONTROL_ENABLED:
         return RedirectResponse(url="/", status_code=303)
 
-    referer = request.headers.get("referer")
-    if not is_allowed_referer(referer):
-        logger.info("[ACCESS] ENTRY_REJECTED referer=%s", referer or "-")
-        return _access_required(request)
-
     if not OWNER_ACCESS_KEY:
         logger.error("[ACCESS] OWNER_ACCESS_KEY is missing while access control is enabled")
         return HTMLResponse(
@@ -99,7 +93,11 @@ async def official_entry(request: Request):
             status_code=503,
         )
 
-    logger.info("[ACCESS] ENTRY_ACCEPTED referer=%s", referer)
+    # Some bulletin-board renderers force rel=noreferrer and strip
+    # referrerpolicy attributes. Treat /enter itself as the official gateway
+    # so the guide page only needs a stable link.
+    referer = request.headers.get("referer")
+    logger.info("[ACCESS] ENTRY_ACCEPTED referer=%s mode=entry-link", referer or "-")
     return _grant_access(RedirectResponse(url="/", status_code=303))
 
 
