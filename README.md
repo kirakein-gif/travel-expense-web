@@ -38,7 +38,8 @@ Cloud Run 로그에서는 `[OPINET]` 접두어로 메모리/Firestore 적중, �
 
 ## 공식 진입 접근제어
 - 일반 사용자는 공식 사용설명서의 `/enter` 버튼을 통해 세션을 발급받습니다.
-- 게시판이 Referer를 제거하는 환경을 고려해 `/enter` 자체를 공식 진입문으로 사용합니다.
+- 현재 운영은 게시판이 Referer를 제거하는 환경을 고려해 `/enter` 자체를 공식 진입문으로 사용합니다 (`ACCESS_ENTRY_MODE=link`).
+- 게시판 수정 기능이 개선되어 Referer가 정상 전달되면 `ACCESS_ENTRY_MODE=referer`로 바꾸는 것만으로 기존의 엄격한 공식 게시글 검사 방식으로 전환할 수 있습니다.
 - Cloud Run 메인 주소와 `/api/*`의 직접 접근은 유효한 세션이 없으면 차단합니다.
 - 관리자 직접 접속: `/owner`에서 `OWNER_ACCESS_KEY` 입력
 - 인증 쿠키는 HttpOnly + Secure + SameSite=Lax이며 브라우저 세션 쿠키로 발급되고, 내부 토큰은 최대 12시간 유효합니다.
