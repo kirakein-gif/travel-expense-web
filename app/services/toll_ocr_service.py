@@ -4,6 +4,7 @@ import io
 import logging
 import re
 import unicodedata
+import time
 from collections import Counter, defaultdict
 
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps, ImageStat
@@ -224,8 +225,8 @@ def analyze_receipt_lines(lines: list[str]) -> dict:
 def _prepare_base_image(image: Image.Image) -> Image.Image:
     image = ImageOps.exif_transpose(image).convert("RGB")
     max_side = max(image.width, image.height)
-    if max_side < 2200:
-        scale = min(2.5, 2200 / max(max_side, 1))
+    if max_side < 1800:
+        scale = min(2.2, 1800 / max(max_side, 1))
         image = image.resize(
             (max(1, int(image.width * scale)), max(1, int(image.height * scale))),
             Image.Resampling.LANCZOS,
@@ -413,26 +414,22 @@ def _merge_pass_results(pass_results: list[tuple[str, list[str], dict]]) -> dict
 def _analyze_region(image: Image.Image) -> dict:
     passes: list[tuple[str, list[str], dict]] = []
 
-    def run(name: str, *, psm: int, binary: bool = False) -> dict:
-        lines = _ocr_variant(image, psm=psm, binary=binary)
+    def run(name: str, *, psm: int) -> dict:
+        lines = _ocr_variant(image, psm=psm, binary=False)
         result = analyze_receipt_lines(lines)
         passes.append((name, lines, result))
         return result
 
-    first = run("gray_psm6", psm=6)
+    # Recommended "보고서 인쇄" receipts are sparse and consistently laid out.
+    # One PSM 11 pass is normally enough after adjacent-line amount pairing.
+    first = run("gray_psm11", psm=11)
     if first["status"] == "confirmed":
         merged = _merge_pass_results(passes)
-        merged["note"] = "기본 판독 · 두 개 이상 패턴 일치"
+        merged["note"] = "보고서 인쇄 빠른 판독 · 두 개 이상 패턴 일치"
         return merged
 
-    second = run("gray_psm11", psm=11)
-    merged = _merge_pass_results(passes)
-    if merged["status"] == "confirmed":
-        return merged
-
-    # Thresholded pass is more expensive and can lose thin glyphs, so only use
-    # it when the two grayscale layouts did not already confirm a value.
-    run("binary_psm6", psm=6, binary=True)
+    # Only the receipt that was not confirmed gets one additional layout pass.
+    run("gray_psm4", psm=4)
     return _merge_pass_results(passes)
 
 
@@ -572,6 +569,7 @@ def _analyze_plan(regions: list[Image.Image]) -> list[dict]:
 
 
 def extract_toll_ocr(image_bytes: bytes) -> dict:
+    started_at = time.perf_counter()
     try:
         image = Image.open(io.BytesIO(image_bytes))
         image.load()
@@ -588,18 +586,10 @@ def extract_toll_ocr(image_bytes: bytes) -> dict:
     analyzed: list[tuple[str, list[dict]]] = []
 
     if separators:
+        # For the recommended report-print capture, structural separators are
+        # trusted. Re-reading the whole image was the main source of latency.
         separator_regions = _regions_from_separators(image, separators)
-        separator_results = _analyze_plan(separator_regions)
-        analyzed.append(("separator", separator_results))
-
-        # If every detected receipt is already confirmed, do not spend another
-        # Tesseract pass on the whole image. Otherwise compare against the whole
-        # image in case a receipt's own table border was mistaken for a divider.
-        separator_reliable = bool(separator_results) and all(
-            result.get("status") == "confirmed" for result in separator_results
-        )
-        if not separator_reliable:
-            analyzed.append(("whole", _analyze_plan([image])))
+        analyzed.append(("separator", _analyze_plan(separator_regions)))
     else:
         analyzed.append(("whole", _analyze_plan([image])))
 
@@ -645,14 +635,16 @@ def extract_toll_ocr(image_bytes: bytes) -> dict:
     )
     review_count = len(receipts) - confirmed_count
 
+    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
     logger.info(
-        "[TOLL_OCR] segmentation=%s separators=%s receipts=%s recognized=%s confirmed=%s total=%s",
+        "[TOLL_OCR] segmentation=%s separators=%s receipts=%s recognized=%s confirmed=%s total=%s elapsed_ms=%s",
         best_name,
         separators,
         len(receipts),
         len(recognized),
         confirmed_count,
         total_amount,
+        elapsed_ms,
     )
 
     return {
