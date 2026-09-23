@@ -27,6 +27,8 @@ _SPLIT_WORD_RE = re.compile(
     rf"\b(KEC|CNE)\b[^0-9]{{0,18}}{_AMOUNT_TOKEN}\s*원?",
     re.IGNORECASE,
 )
+_ANY_AMOUNT_RE = re.compile(_AMOUNT_TOKEN)
+_OPERATOR_RE = re.compile(r"\\b(KEC|CNE)\\b", re.IGNORECASE)
 
 
 def _money(value: str | None, *, cleanup_won_glyph: bool = False) -> int | None:
@@ -35,6 +37,7 @@ def _money(value: str | None, *, cleanup_won_glyph: bool = False) -> int | None:
     raw = (
         value.replace(",", "")
         .replace(".", "")
+        .replace(":", "")
         .replace(" ", "")
         .replace("\u00a0", "")
     )
@@ -53,6 +56,8 @@ def _money(value: str | None, *, cleanup_won_glyph: bool = False) -> int | None:
 def _normalize_line(line: str) -> str:
     value = unicodedata.normalize("NFKC", line or "")
     value = value.replace("：", ":").replace("₩", "원")
+    value = re.sub(r"(?<=\\d)[,.:]\\s*[,.](?=\\d{3}(?:\\D|$))", ",", value)
+    value = re.sub(r"(?<=\\d):(?=\\d{3}(?:\\D|$))", ",", value)
     # Restrict OCR-token correction to isolated operator words.
     value = re.sub(r"\bK[E3]C\b", "KEC", value, flags=re.IGNORECASE)
     value = re.sub(r"\bCN[E3]\b", "CNE", value, flags=re.IGNORECASE)
