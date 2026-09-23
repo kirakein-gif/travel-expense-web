@@ -3,10 +3,17 @@ from __future__ import annotations
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from app.browser.opinet_browser import normalize_sigungu, query_opinet_region_prices
+from app.browser.opinet_browser import (
+    normalize_province,
+    normalize_sigungu,
+    query_opinet_region_prices,
+)
 from app.config import OPINET_API_KEY
 from app.services.cache_service import cache
-from app.services.opinet_api_service import get_historical_area_price
+from app.services.opinet_api_service import (
+    get_historical_area_price,
+    save_validated_historical_area_price,
+)
 from app.services.ev_rate_service import get_electric_rate
 from app.services.travel_policy import get_vehicle_spec
 
@@ -57,7 +64,8 @@ async def _get_browser_price(
     sigungu_name: str,
 ) -> dict:
     _ensure_opinet_date_available(travel_date)
-    cache_key = f"v4|{travel_date.isoformat()}|{province_name}|{lookup_vehicle_type}"
+    normalized_province = normalize_province(province_name)
+    cache_key = f"v5|{travel_date.isoformat()}|{normalized_province}|{lookup_vehicle_type}"
 
     async def factory() -> dict:
         result = await query_opinet_region_prices(
@@ -68,11 +76,13 @@ async def _get_browser_price(
         return {
             "prices": result.prices,
             "source_url": result.source_url,
-            "evidence_path": result.evidence_path,
             "province": result.province,
             "product_label": result.product_label,
         }
 
+    # A historical OPINET daily average does not change after publication.
+    # Cache the full province table permanently so validating a second city on
+    # the same date/fuel does not require another browser lookup.
     cached_result, cache_hit = await cache.get_or_create(
         "fuel_price",
         cache_key,
@@ -86,9 +96,51 @@ async def _get_browser_price(
         "source": "한국석유공사 오피넷 웹조회",
         "source_url": cached_result.get("source_url"),
         "evidence_status": "cached" if cache_hit else "captured",
-        "evidence_path": cached_result.get("evidence_path"),
+        "evidence_path": None,
         "cache_hit": cache_hit,
     }
+
+
+async def _validate_api_price(
+    *,
+    travel_date: date,
+    lookup_vehicle_type: str,
+    province_name: str,
+    sigungu_name: str,
+    api_result: dict,
+) -> dict:
+    try:
+        web_result = await _get_browser_price(
+            travel_date,
+            lookup_vehicle_type,
+            province_name,
+            sigungu_name,
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "오피넷 API 가격은 조회했지만 웹페이지 대조 검증에 실패했습니다. "
+            "검증되지 않은 값은 공유 캐시에 저장하지 않습니다. "
+            f"({exc})"
+        ) from exc
+
+    api_price = float(api_result["price"])
+    web_price = float(web_result["price"])
+    if abs(api_price - web_price) > 0.011:
+        raise RuntimeError(
+            "오피넷 API 가격과 웹페이지 가격이 일치하지 않습니다. "
+            "검증되지 않은 값은 사용하거나 공유 캐시에 저장하지 않습니다. "
+            f"API {api_price:,.2f}원 / 웹 {web_price:,.2f}원"
+        )
+
+    validated = await save_validated_historical_area_price(
+        api_result,
+        web_price=web_price,
+        province_name=province_name,
+        sigungu_name=sigungu_name,
+        vehicle_type=lookup_vehicle_type,
+        web_source_url=web_result.get("source_url"),
+    )
+    return {**validated, "cache_hit": False}
 
 
 async def get_energy_price(
@@ -111,13 +163,28 @@ async def get_energy_price(
                     sigungu_name=sigungu_name,
                     vehicle_type=lookup_vehicle_type,
                 )
+                if not api_result.get("cache_hit"):
+                    api_result = await _validate_api_price(
+                        travel_date=travel_date,
+                        lookup_vehicle_type=lookup_vehicle_type,
+                        province_name=province_name,
+                        sigungu_name=sigungu_name,
+                        api_result=api_result,
+                    )
             except Exception as exc:
-                raise RuntimeError(f"오피넷 API 조회 실패: {exc}") from exc
+                raise RuntimeError(f"오피넷 유가 조회/검증 실패: {exc}") from exc
 
             sejong_scope = "세종" in (province_name or "")
+            source = (
+                "한국석유공사 오피넷 검증 캐시"
+                if api_result.get("cache_hit")
+                else "한국석유공사 오피넷 API · 웹 검증 완료"
+            )
+            if sejong_scope:
+                source += " · 세종시 평균"
             return {
                 "price": api_result["price"],
-                "source": "한국석유공사 오피넷 API · 세종시 평균" if sejong_scope else "한국석유공사 오피넷 API",
+                "source": source,
                 "source_url": api_result.get("source_url"),
                 "evidence_status": "api_price_ready",
                 "evidence_path": None,
