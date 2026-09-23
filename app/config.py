@@ -9,3 +9,4 @@ ACCESS_CONTROL_ENABLED = os.getenv("ACCESS_CONTROL_ENABLED", "false").strip().lo
 }
 OWNER_ACCESS_KEY = os.getenv("OWNER_ACCESS_KEY", "")
 ACCESS_COOKIE_NAME = os.getenv("ACCESS_COOKIE_NAME", "ddalkkak_access")
+ACCESS_ENTRY_MODE = os.getenv("ACCESS_ENTRY_MODE", "link").strip().lower()

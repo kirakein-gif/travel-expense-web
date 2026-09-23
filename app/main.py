@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.config import ACCESS_CONTROL_ENABLED, ACCESS_COOKIE_NAME, OWNER_ACCESS_KEY
+from app.config import ACCESS_CONTROL_ENABLED, ACCESS_COOKIE_NAME, ACCESS_ENTRY_MODE, OWNER_ACCESS_KEY
 from app.routes.travel import router as travel_router
 from app.services.access_service import (
     OFFICIAL_GUIDE_URL,
@@ -15,7 +15,7 @@ from app.services.access_service import (
     verify_session_token,
 )
 
-APP_VERSION = "1.28.0"
+APP_VERSION = "1.28.1"
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -23,7 +23,7 @@ app = FastAPI(title="딸깍 여비정산서", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
-_PUBLIC_PATHS = {"/enter", "/owner", "/health"}
+_PUBLIC_PATHS = {"/enter", "/owner", "/health", "/favicon.ico"}
 
 
 def _has_access(request: Request) -> bool:
@@ -87,11 +87,6 @@ async def official_entry(request: Request):
     if not ACCESS_CONTROL_ENABLED:
         return RedirectResponse(url="/", status_code=303)
 
-    referer = request.headers.get("referer")
-    if not is_allowed_referer(referer):
-        logger.info("[ACCESS] ENTRY_REJECTED referer=%s", referer or "-")
-        return _access_required(request)
-
     if not OWNER_ACCESS_KEY:
         logger.error("[ACCESS] OWNER_ACCESS_KEY is missing while access control is enabled")
         return HTMLResponse(
@@ -99,7 +94,18 @@ async def official_entry(request: Request):
             status_code=503,
         )
 
-    logger.info("[ACCESS] ENTRY_ACCEPTED referer=%s", referer)
+    referer = request.headers.get("referer")
+    if ACCESS_ENTRY_MODE == "referer":
+        if not is_allowed_referer(referer):
+            logger.info("[ACCESS] ENTRY_REJECTED referer=%s mode=referer", referer or "-")
+            return _access_required(request)
+        logger.info("[ACCESS] ENTRY_ACCEPTED referer=%s mode=referer", referer)
+    else:
+        # Some bulletin-board renderers force rel=noreferrer and strip
+        # referrerpolicy attributes. In link mode, /enter itself is the
+        # official gateway so the guide page only needs a stable link.
+        logger.info("[ACCESS] ENTRY_ACCEPTED referer=%s mode=entry-link", referer or "-")
+
     return _grant_access(RedirectResponse(url="/", status_code=303))
 
 

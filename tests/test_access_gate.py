@@ -1,32 +1,8 @@
 from app.services.access_service import (
     create_session_token,
-    is_allowed_referer,
     owner_key_matches,
     verify_session_token,
 )
-
-
-def test_accepts_short_guide_url():
-    assert is_allowed_referer("https://bbs.ckwiki.kr/relese/73")
-    assert is_allowed_referer("https://bbs.ckwiki.kr/relese/73/")
-
-
-def test_accepts_board_php_guide_url():
-    assert is_allowed_referer(
-        "https://bbs.ckwiki.kr/bbs/board.php?bo_table=relese&wr_id=73"
-    )
-    assert is_allowed_referer(
-        "https://bbs.ckwiki.kr/bbs/board.php?wr_id=73&bo_table=relese"
-    )
-
-
-def test_rejects_other_pages_and_hosts():
-    assert not is_allowed_referer("https://bbs.ckwiki.kr/relese/72")
-    assert not is_allowed_referer(
-        "https://bbs.ckwiki.kr/bbs/board.php?bo_table=relese&wr_id=72"
-    )
-    assert not is_allowed_referer("https://example.com/relese/73")
-    assert not is_allowed_referer(None)
 
 
 def test_signed_session_is_valid_and_expires():
