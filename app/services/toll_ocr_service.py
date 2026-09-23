@@ -13,7 +13,7 @@ from pytesseract import Output
 
 logger = logging.getLogger("uvicorn.error")
 
-_AMOUNT_TOKEN = r"([0-9]{1,3}(?:[\s,.][0-9]{3})+(?:[48])?|[0-9]{2,6})"
+_AMOUNT_TOKEN = r"([0-9]{1,3}(?:[\s,.:][0-9]{3})+(?:[48])?|[0-9]{2,6})"
 _VEHICLE_RE = re.compile(r"([1-6])\s*종")
 _SUPPLY_RE = re.compile(
     rf"공\s*급\s*가\s*액[^0-9]{{0,14}}{_AMOUNT_TOKEN}\s*원?"
@@ -29,7 +29,7 @@ _SPLIT_WORD_RE = re.compile(
     re.IGNORECASE,
 )
 _ANY_AMOUNT_RE = re.compile(_AMOUNT_TOKEN)
-_OPERATOR_RE = re.compile(r"\\b(KEC|CNE)\\b", re.IGNORECASE)
+_OPERATOR_RE = re.compile(r"\b(KEC|CNE)\b", re.IGNORECASE)
 
 
 def _money(value: str | None, *, cleanup_won_glyph: bool = False) -> int | None:
@@ -57,8 +57,8 @@ def _money(value: str | None, *, cleanup_won_glyph: bool = False) -> int | None:
 def _normalize_line(line: str) -> str:
     value = unicodedata.normalize("NFKC", line or "")
     value = value.replace("：", ":").replace("₩", "원")
-    value = re.sub(r"(?<=\\d)[,.:]\\s*[,.](?=\\d{3}(?:\\D|$))", ",", value)
-    value = re.sub(r"(?<=\\d):(?=\\d{3}(?:\\D|$))", ",", value)
+    value = re.sub(r"(?<=\d)[,.:]\s*[,.](?=\d{3}(?:\D|$))", ",", value)
+    value = re.sub(r"(?<=\d):(?=\d{3}(?:\D|$))", ",", value)
     # Restrict OCR-token correction to isolated operator words.
     value = re.sub(r"\bK[E3]C\b", "KEC", value, flags=re.IGNORECASE)
     value = re.sub(r"\bCN[E3]\b", "CNE", value, flags=re.IGNORECASE)
